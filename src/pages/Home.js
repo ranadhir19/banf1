@@ -50,7 +50,16 @@ const PAGES = {
     HERITAGE: '/heritage',
     LEADERSHIP: '/leadership',
     FEEDBACK: '/feedback',
-    NEWCOMER: '/newcomer-guide'
+    NEWCOMER: '/newcomer-guide',
+    // New Feature Pages (v3.0)
+    REPORTS: '/reports',
+    INSIGHTS: '/insights',
+    COMMUNITY: '/community',
+    ADS: '/ads',
+    DONATE: '/donate',
+    CAREERS: '/careers',
+    SCHOLARSHIPS: '/scholarships',
+    CHARITY: '/charity'
 };
 
 // ============================================================
@@ -75,7 +84,10 @@ $w.onReady(async function () {
         loadSponsorShowcase(),
         loadMembershipInfo(),
         setupQuickActions(),
-        setupContactForm()
+        setupContactForm(),
+        // New Feature Sections (v3.0)
+        loadCommunityHighlights(),
+        loadInsightsPreview()
     ]);
     
     console.log('✅ BANF Home Page Ready!');
@@ -103,7 +115,10 @@ function setupNavigation() {
         { id: 'btnHeritage', page: PAGES.HERITAGE, label: 'Heritage' },
         { id: 'btnLeadership', page: PAGES.LEADERSHIP, label: 'Leadership' },
         { id: 'btnNewcomer', page: PAGES.NEWCOMER, label: 'New in Jax?' },
-        { id: 'btnFeedback', page: PAGES.FEEDBACK, label: 'Feedback' }
+        { id: 'btnFeedback', page: PAGES.FEEDBACK, label: 'Feedback' },
+        // New Features (v3.0)
+        { id: 'btnCommunity', page: PAGES.COMMUNITY, label: 'Community' },
+        { id: 'btnDonate', page: PAGES.DONATE, label: 'Donate' }
     ];
     
     // User Menu Items
@@ -137,7 +152,12 @@ function setupNavigation() {
         { id: 'quickRadio', page: PAGES.RADIO },
         { id: 'quickMagazine', page: PAGES.MAGAZINE },
         { id: 'quickGallery', page: PAGES.GALLERY },
-        { id: 'quickVolunteer', page: PAGES.VOLUNTEER }
+        { id: 'quickVolunteer', page: PAGES.VOLUNTEER },
+        // New Feature Quick Access (v3.0)
+        { id: 'quickCommunity', page: PAGES.COMMUNITY },
+        { id: 'quickDonate', page: PAGES.DONATE },
+        { id: 'quickCareers', page: PAGES.CAREERS },
+        { id: 'quickScholarships', page: PAGES.SCHOLARSHIPS }
     ];
     
     quickAccessItems.forEach(item => {
@@ -540,10 +560,17 @@ async function loadMembershipInfo() {
 function setupQuickActions() {
     // Quick action buttons
     const quickActions = [
-        { id: 'btnQuickDonate', action: () => wixLocation.to('/donate') },
+        { id: 'btnQuickDonate', action: () => wixLocation.to(PAGES.DONATE) },
         { id: 'btnQuickVolunteer', action: () => wixLocation.to(PAGES.VOLUNTEER) },
         { id: 'btnQuickFeedback', action: () => wixLocation.to(PAGES.FEEDBACK) },
-        { id: 'btnQuickNewcomer', action: () => wixLocation.to(PAGES.NEWCOMER) }
+        { id: 'btnQuickNewcomer', action: () => wixLocation.to(PAGES.NEWCOMER) },
+        // New Feature Quick Actions (v3.0)
+        { id: 'btnQuickCommunity', action: () => wixLocation.to(PAGES.COMMUNITY) },
+        { id: 'btnQuickCareers', action: () => wixLocation.to(PAGES.CAREERS) },
+        { id: 'btnQuickScholarships', action: () => wixLocation.to(PAGES.SCHOLARSHIPS) },
+        { id: 'btnQuickCharity', action: () => wixLocation.to(PAGES.CHARITY) },
+        { id: 'btnQuickReports', action: () => wixLocation.to(PAGES.REPORTS) },
+        { id: 'btnQuickInsights', action: () => wixLocation.to(PAGES.INSIGHTS) }
     ];
     
     quickActions.forEach(item => {
@@ -711,4 +738,169 @@ function showToast(message, type = 'info') {
     } catch (e) {
         console.log(message);
     }
+}
+
+// ============================================================
+// COMMUNITY ENGAGEMENT SECTION (v3.0)
+// ============================================================
+async function loadCommunityHighlights() {
+    try {
+        const { getActiveInitiatives } = await import('backend/community-engagement.jsw');
+        const initiatives = await getActiveInitiatives(4); // Get 4 active initiatives
+        
+        if ($w('#repeaterCommunity').exists && initiatives && initiatives.length > 0) {
+            $w('#repeaterCommunity').data = initiatives.map((item, index) => ({
+                ...item,
+                _id: item._id || `community_${index}`
+            }));
+            
+            $w('#repeaterCommunity').onItemReady(($item, itemData) => {
+                if ($item('#txtInitiativeName').exists) {
+                    $item('#txtInitiativeName').text = itemData.title || 'Community Initiative';
+                }
+                if ($item('#txtInitiativeType').exists) {
+                    $item('#txtInitiativeType').text = itemData.initiativeType || 'Community';
+                }
+                if ($item('#txtGoalProgress').exists) {
+                    const progress = itemData.goalAmount > 0 
+                        ? Math.round((itemData.currentAmount / itemData.goalAmount) * 100)
+                        : 0;
+                    $item('#txtGoalProgress').text = `${progress}% of goal`;
+                }
+                if ($item('#imgCommunity').exists && itemData.imageUrl) {
+                    $item('#imgCommunity').src = itemData.imageUrl;
+                }
+                
+                // View details button
+                if ($item('#btnViewInitiative').exists) {
+                    $item('#btnViewInitiative').onClick(() => {
+                        wixLocation.to(`${PAGES.COMMUNITY}?id=${itemData._id}`);
+                    });
+                }
+                
+                // Donate button
+                if ($item('#btnDonateInitiative').exists) {
+                    $item('#btnDonateInitiative').onClick(() => {
+                        wixLocation.to(`${PAGES.DONATE}?initiative=${itemData._id}`);
+                    });
+                }
+            });
+        }
+        
+        // View All Community button
+        if ($w('#btnViewAllCommunity').exists) {
+            $w('#btnViewAllCommunity').onClick(() => wixLocation.to(PAGES.COMMUNITY));
+        }
+        
+        // Charity button
+        if ($w('#btnViewCharity').exists) {
+            $w('#btnViewCharity').onClick(() => wixLocation.to(PAGES.CHARITY));
+        }
+        
+        // Career Guidance button
+        if ($w('#btnViewCareers').exists) {
+            $w('#btnViewCareers').onClick(() => wixLocation.to(PAGES.CAREERS));
+        }
+        
+        // Scholarships button
+        if ($w('#btnViewScholarships').exists) {
+            $w('#btnViewScholarships').onClick(() => wixLocation.to(PAGES.SCHOLARSHIPS));
+        }
+        
+    } catch (e) {
+        console.log('Community highlights loading:', e.message);
+    }
+    
+    return Promise.resolve();
+}
+
+// ============================================================
+// INSIGHTS PREVIEW SECTION (v3.0)
+// ============================================================
+async function loadInsightsPreview() {
+    try {
+        // Only show insights for logged-in admins
+        const isLoggedIn = wixUsers.currentUser.loggedIn;
+        if (!isLoggedIn) {
+            if ($w('#sectionInsights').exists) {
+                $w('#sectionInsights').hide();
+            }
+            return Promise.resolve();
+        }
+        
+        const { getQuickInsights } = await import('backend/insights-analytics.jsw');
+        const insights = await getQuickInsights();
+        
+        if (insights && insights.success) {
+            // Update quick insight cards
+            const insightCards = [
+                { id: 'txtInsightMembers', value: insights.membership?.totalMembers || '500+', label: 'Total Members' },
+                { id: 'txtInsightGrowth', value: `${insights.membership?.growthRate || 0}%`, label: 'Growth Rate' },
+                { id: 'txtInsightEvents', value: insights.events?.upcomingEvents || '0', label: 'Upcoming Events' },
+                { id: 'txtInsightRevenue', value: `$${insights.financial?.incomeThisMonth || 0}`, label: 'This Month' }
+            ];
+            
+            insightCards.forEach(card => {
+                try {
+                    if ($w(`#${card.id}`).exists) {
+                        $w(`#${card.id}`).text = String(card.value);
+                    }
+                } catch (e) {
+                    // Element doesn't exist
+                }
+            });
+            
+            // Show insights section
+            if ($w('#sectionInsights').exists) {
+                $w('#sectionInsights').show();
+            }
+        }
+        
+        // View Full Insights button
+        if ($w('#btnViewInsights').exists) {
+            $w('#btnViewInsights').onClick(() => wixLocation.to(PAGES.INSIGHTS));
+        }
+        
+        // View Reports button
+        if ($w('#btnViewReports').exists) {
+            $w('#btnViewReports').onClick(() => wixLocation.to(PAGES.REPORTS));
+        }
+        
+    } catch (e) {
+        console.log('Insights preview loading:', e.message);
+        // Hide insights section on error
+        if ($w('#sectionInsights').exists) {
+            $w('#sectionInsights').hide();
+        }
+    }
+    
+    return Promise.resolve();
+}
+
+// ============================================================
+// ADMIN PANEL QUICK ACCESS (v3.0)
+// ============================================================
+function setupAdminQuickAccess() {
+    // Admin quick links (shown only to admins)
+    const adminLinks = [
+        { id: 'btnAdminReports', page: PAGES.REPORTS, label: 'Reports' },
+        { id: 'btnAdminInsights', page: PAGES.INSIGHTS, label: 'Insights' },
+        { id: 'btnAdminAds', page: PAGES.ADS, label: 'Ad Manager' },
+        { id: 'btnAdminCommunity', page: `${PAGES.ADMIN}#community`, label: 'Community' },
+        { id: 'btnAdminMembers', page: `${PAGES.ADMIN}#members`, label: 'Members' },
+        { id: 'btnAdminEvents', page: `${PAGES.ADMIN}#events`, label: 'Events' },
+        { id: 'btnAdminFinance', page: `${PAGES.ADMIN}#finance`, label: 'Finance' },
+        { id: 'btnAdminRadio', page: `${PAGES.ADMIN}#radio`, label: 'Radio' },
+        { id: 'btnAdminMagazine', page: `${PAGES.ADMIN}#magazine`, label: 'Magazine' }
+    ];
+    
+    adminLinks.forEach(link => {
+        try {
+            if ($w(`#${link.id}`).exists) {
+                $w(`#${link.id}`).onClick(() => wixLocation.to(link.page));
+            }
+        } catch (e) {
+            // Element doesn't exist
+        }
+    });
 }

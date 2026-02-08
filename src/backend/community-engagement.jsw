@@ -1,0 +1,707 @@
+/**
+ * BANF Community Engagement Module
+ * Charity, Career Guidance, and Community Initiatives Management
+ * 
+ * File: backend/community-engagement.jsw
+ * Deploy to: Wix Velo Backend
+ */
+
+import wixData from 'wix-data';
+import { currentUser } from 'wix-users-backend';
+import { hasSpecializedPermission } from 'backend/specialized-admin-roles.jsw';
+import { sendEmail, EMAIL_TEMPLATES } from 'backend/notification-service.jsw';
+
+// Initiative Types
+export const INITIATIVE_TYPES = {
+    CHARITY: 'charity',
+    CAREER_GUIDANCE: 'career_guidance',
+    EDUCATION: 'education',
+    HEALTH_WELLNESS: 'health_wellness',
+    ENVIRONMENT: 'environment',
+    CULTURAL: 'cultural',
+    COMMUNITY_SERVICE: 'community_service',
+    YOUTH_PROGRAM: 'youth_program',
+    SENIOR_SUPPORT: 'senior_support',
+    SCHOLARSHIP: 'scholarship'
+};
+
+// Initiative Status
+export const INITIATIVE_STATUS = {
+    DRAFT: 'draft',
+    PROPOSED: 'proposed',
+    APPROVED: 'approved',
+    ACTIVE: 'active',
+    COMPLETED: 'completed',
+    CANCELLED: 'cancelled'
+};
+
+// Donation Types
+export const DONATION_TYPES = {
+    MONETARY: 'monetary',
+    GOODS: 'goods',
+    SERVICES: 'services',
+    TIME: 'time' // Volunteer hours
+};
+
+/**
+ * Create a new community initiative
+ */
+export async function createInitiative(initiativeData, userId) {
+    try {
+        const hasPermission = await hasSpecializedPermission(userId, 'community_create');
+        if (!hasPermission) {
+            return { success: false, error: 'Not authorized to create initiatives' };
+        }
+        
+        const initiative = await wixData.insert('CommunityInitiatives', {
+            ...initiativeData,
+            initiativeType: initiativeData.type || INITIATIVE_TYPES.COMMUNITY_SERVICE,
+            status: INITIATIVE_STATUS.PROPOSED,
+            createdBy: userId,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            
+            // Goals and metrics
+            goalAmount: initiativeData.goalAmount || 0,
+            currentAmount: 0,
+            goalParticipants: initiativeData.goalParticipants || 0,
+            currentParticipants: 0,
+            volunteerHoursGoal: initiativeData.volunteerHoursGoal || 0,
+            volunteerHoursLogged: 0,
+            
+            // Tracking
+            donations: [],
+            participants: [],
+            volunteers: [],
+            updates: [],
+            milestones: initiativeData.milestones || []
+        }, { suppressAuth: true });
+        
+        // Notify community leads
+        await notifyInitiativeCreated(initiative);
+        
+        return { success: true, initiativeId: initiative._id, initiative };
+    } catch (error) {
+        console.error('Create initiative failed:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+/**
+ * Update initiative status
+ */
+export async function updateInitiativeStatus(initiativeId, newStatus, userId) {
+    try {
+        const hasPermission = await hasSpecializedPermission(userId, 'community_approve');
+        if (!hasPermission && newStatus !== INITIATIVE_STATUS.CANCELLED) {
+            return { success: false, error: 'Not authorized to update initiative status' };
+        }
+        
+        const initiative = await wixData.get('CommunityInitiatives', initiativeId, { suppressAuth: true });
+        if (!initiative) {
+            return { success: false, error: 'Initiative not found' };
+        }
+        
+        const updated = await wixData.update('CommunityInitiatives', {
+            ...initiative,
+            status: newStatus,
+            updatedAt: new Date(),
+            statusHistory: [
+                ...(initiative.statusHistory || []),
+                {
+                    status: newStatus,
+                    changedBy: userId,
+                    changedAt: new Date()
+                }
+            ]
+        }, { suppressAuth: true });
+        
+        return { success: true, initiative: updated };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
+}
+
+/**
+ * Record a donation
+ */
+export async function recordDonation(donationData, userId) {
+    try {
+        const donation = await wixData.insert('CommunityDonations', {
+            ...donationData,
+            donorId: userId,
+            donationType: donationData.type || DONATION_TYPES.MONETARY,
+            status: 'confirmed',
+            createdAt: new Date(),
+            taxDeductible: donationData.taxDeductible !== false,
+            receiptGenerated: false
+        }, { suppressAuth: true });
+        
+        // Update initiative totals if linked
+        if (donationData.initiativeId) {
+            await updateInitiativeDonation(donationData.initiativeId, donation);
+        }
+        
+        // Generate receipt if monetary
+        if (donationData.type === DONATION_TYPES.MONETARY) {
+            await generateDonationReceipt(donation);
+        }
+        
+        return { success: true, donationId: donation._id, donation };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
+}
+
+/**
+ * Update initiative with new donation
+ */
+async function updateInitiativeDonation(initiativeId, donation) {
+    const initiative = await wixData.get('CommunityInitiatives', initiativeId, { suppressAuth: true });
+    if (!initiative) return;
+    
+    let newAmount = initiative.currentAmount || 0;
+    if (donation.donationType === DONATION_TYPES.MONETARY) {
+        newAmount += donation.amount || 0;
+    }
+    
+    await wixData.update('CommunityInitiatives', {
+        ...initiative,
+        currentAmount: newAmount,
+        donations: [...(initiative.donations || []), donation._id],
+        updatedAt: new Date()
+    }, { suppressAuth: true });
+}
+
+/**
+ * Register as volunteer for initiative
+ */
+export async function registerVolunteer(initiativeId, volunteerData, userId) {
+    try {
+        const initiative = await wixData.get('CommunityInitiatives', initiativeId, { suppressAuth: true });
+        if (!initiative) {
+            return { success: false, error: 'Initiative not found' };
+        }
+        
+        // Check if already registered
+        const existing = await wixData.query('CommunityVolunteers')
+            .eq('initiativeId', initiativeId)
+            .eq('userId', userId)
+            .find({ suppressAuth: true });
+        
+        if (existing.items.length > 0) {
+            return { success: false, error: 'Already registered as volunteer' };
+        }
+        
+        const volunteer = await wixData.insert('CommunityVolunteers', {
+            initiativeId,
+            userId,
+            name: volunteerData.name,
+            email: volunteerData.email,
+            phone: volunteerData.phone,
+            skills: volunteerData.skills || [],
+            availability: volunteerData.availability,
+            status: 'registered',
+            hoursLogged: 0,
+            registeredAt: new Date()
+        }, { suppressAuth: true });
+        
+        // Update initiative participant count
+        await wixData.update('CommunityInitiatives', {
+            ...initiative,
+            currentParticipants: (initiative.currentParticipants || 0) + 1,
+            volunteers: [...(initiative.volunteers || []), userId]
+        }, { suppressAuth: true });
+        
+        return { success: true, volunteerId: volunteer._id };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
+}
+
+/**
+ * Log volunteer hours
+ */
+export async function logVolunteerHours(initiativeId, hoursData, userId) {
+    try {
+        const log = await wixData.insert('VolunteerHours', {
+            initiativeId,
+            volunteerId: userId,
+            hours: hoursData.hours,
+            date: hoursData.date || new Date(),
+            description: hoursData.description,
+            taskType: hoursData.taskType,
+            supervisorApproved: false,
+            createdAt: new Date()
+        }, { suppressAuth: true });
+        
+        // Update volunteer total
+        const volunteer = await wixData.query('CommunityVolunteers')
+            .eq('initiativeId', initiativeId)
+            .eq('userId', userId)
+            .find({ suppressAuth: true });
+        
+        if (volunteer.items.length > 0) {
+            await wixData.update('CommunityVolunteers', {
+                ...volunteer.items[0],
+                hoursLogged: (volunteer.items[0].hoursLogged || 0) + hoursData.hours
+            }, { suppressAuth: true });
+        }
+        
+        // Update initiative total
+        const initiative = await wixData.get('CommunityInitiatives', initiativeId, { suppressAuth: true });
+        if (initiative) {
+            await wixData.update('CommunityInitiatives', {
+                ...initiative,
+                volunteerHoursLogged: (initiative.volunteerHoursLogged || 0) + hoursData.hours
+            }, { suppressAuth: true });
+        }
+        
+        return { success: true, logId: log._id };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
+}
+
+// ==================== CAREER GUIDANCE ====================
+
+/**
+ * Create career guidance session
+ */
+export async function createCareerSession(sessionData, userId) {
+    try {
+        const hasPermission = await hasSpecializedPermission(userId, 'community_career');
+        if (!hasPermission) {
+            return { success: false, error: 'Not authorized to create career sessions' };
+        }
+        
+        const session = await wixData.insert('CareerGuidanceSessions', {
+            ...sessionData,
+            sessionType: sessionData.type, // 'workshop', 'mentoring', 'webinar', 'counseling'
+            status: 'scheduled',
+            createdBy: userId,
+            createdAt: new Date(),
+            registrations: [],
+            maxParticipants: sessionData.maxParticipants || 50,
+            currentRegistrations: 0,
+            
+            // Session details
+            topics: sessionData.topics || [],
+            targetAudience: sessionData.targetAudience || 'all', // 'students', 'professionals', 'career_changers'
+            industry: sessionData.industry,
+            mentorId: sessionData.mentorId,
+            resources: sessionData.resources || []
+        }, { suppressAuth: true });
+        
+        return { success: true, sessionId: session._id, session };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
+}
+
+/**
+ * Register for career guidance session
+ */
+export async function registerForCareerSession(sessionId, registrationData, userId) {
+    try {
+        const session = await wixData.get('CareerGuidanceSessions', sessionId, { suppressAuth: true });
+        if (!session) {
+            return { success: false, error: 'Session not found' };
+        }
+        
+        if (session.currentRegistrations >= session.maxParticipants) {
+            return { success: false, error: 'Session is full' };
+        }
+        
+        // Check existing registration
+        const existing = await wixData.query('CareerSessionRegistrations')
+            .eq('sessionId', sessionId)
+            .eq('userId', userId)
+            .find({ suppressAuth: true });
+        
+        if (existing.items.length > 0) {
+            return { success: false, error: 'Already registered' };
+        }
+        
+        const registration = await wixData.insert('CareerSessionRegistrations', {
+            sessionId,
+            userId,
+            name: registrationData.name,
+            email: registrationData.email,
+            currentRole: registrationData.currentRole,
+            targetRole: registrationData.targetRole,
+            questions: registrationData.questions || [],
+            status: 'registered',
+            registeredAt: new Date()
+        }, { suppressAuth: true });
+        
+        // Update session count
+        await wixData.update('CareerGuidanceSessions', {
+            ...session,
+            currentRegistrations: session.currentRegistrations + 1,
+            registrations: [...session.registrations, registration._id]
+        }, { suppressAuth: true });
+        
+        return { success: true, registrationId: registration._id };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
+}
+
+/**
+ * Create mentorship match
+ */
+export async function createMentorshipMatch(mentorId, menteeId, matchData, adminUserId) {
+    try {
+        const hasPermission = await hasSpecializedPermission(adminUserId, 'community_career');
+        if (!hasPermission) {
+            return { success: false, error: 'Not authorized' };
+        }
+        
+        const match = await wixData.insert('MentorshipMatches', {
+            mentorId,
+            menteeId,
+            industry: matchData.industry,
+            goals: matchData.goals || [],
+            duration: matchData.duration || '6_months', // '3_months', '6_months', '12_months'
+            status: 'pending_mentor_approval',
+            meetingFrequency: matchData.meetingFrequency || 'monthly',
+            createdBy: adminUserId,
+            createdAt: new Date(),
+            sessions: [],
+            feedback: []
+        }, { suppressAuth: true });
+        
+        // Notify mentor
+        await notifyMentorMatch(match);
+        
+        return { success: true, matchId: match._id };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
+}
+
+// ==================== SCHOLARSHIP PROGRAMS ====================
+
+/**
+ * Create scholarship program
+ */
+export async function createScholarship(scholarshipData, userId) {
+    try {
+        const hasPermission = await hasSpecializedPermission(userId, 'community_scholarship');
+        if (!hasPermission) {
+            return { success: false, error: 'Not authorized' };
+        }
+        
+        const scholarship = await wixData.insert('Scholarships', {
+            ...scholarshipData,
+            status: 'active',
+            createdBy: userId,
+            createdAt: new Date(),
+            
+            // Scholarship details
+            amount: scholarshipData.amount,
+            numberOfAwards: scholarshipData.numberOfAwards || 1,
+            eligibility: scholarshipData.eligibility || {},
+            applicationDeadline: scholarshipData.applicationDeadline,
+            
+            // Requirements
+            requiredDocuments: scholarshipData.requiredDocuments || [
+                'transcript', 'essay', 'recommendation_letters'
+            ],
+            essayPrompt: scholarshipData.essayPrompt,
+            minGPA: scholarshipData.minGPA,
+            
+            // Tracking
+            applications: [],
+            recipients: [],
+            fundingSource: scholarshipData.fundingSource
+        }, { suppressAuth: true });
+        
+        return { success: true, scholarshipId: scholarship._id, scholarship };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
+}
+
+/**
+ * Submit scholarship application
+ */
+export async function submitScholarshipApplication(scholarshipId, applicationData, userId) {
+    try {
+        const scholarship = await wixData.get('Scholarships', scholarshipId, { suppressAuth: true });
+        if (!scholarship) {
+            return { success: false, error: 'Scholarship not found' };
+        }
+        
+        if (new Date() > new Date(scholarship.applicationDeadline)) {
+            return { success: false, error: 'Application deadline has passed' };
+        }
+        
+        const application = await wixData.insert('ScholarshipApplications', {
+            scholarshipId,
+            applicantId: userId,
+            personalInfo: applicationData.personalInfo,
+            academicInfo: applicationData.academicInfo,
+            essay: applicationData.essay,
+            documents: applicationData.documents || [],
+            status: 'submitted',
+            submittedAt: new Date(),
+            reviewScore: null,
+            reviewNotes: [],
+            reviewedBy: null
+        }, { suppressAuth: true });
+        
+        // Update scholarship applications list
+        await wixData.update('Scholarships', {
+            ...scholarship,
+            applications: [...scholarship.applications, application._id]
+        }, { suppressAuth: true });
+        
+        return { success: true, applicationId: application._id };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
+}
+
+// ==================== COMMUNITY PROGRAMS ====================
+
+/**
+ * Create community program
+ */
+export async function createCommunityProgram(programData, userId) {
+    try {
+        const hasPermission = await hasSpecializedPermission(userId, 'community_create');
+        if (!hasPermission) {
+            return { success: false, error: 'Not authorized' };
+        }
+        
+        const program = await wixData.insert('CommunityPrograms', {
+            ...programData,
+            programType: programData.type, // 'youth', 'senior', 'health', 'education', 'cultural'
+            status: 'active',
+            createdBy: userId,
+            createdAt: new Date(),
+            
+            // Schedule
+            schedule: programData.schedule, // { frequency, day, time, duration }
+            startDate: programData.startDate,
+            endDate: programData.endDate,
+            
+            // Participants
+            maxParticipants: programData.maxParticipants,
+            currentParticipants: 0,
+            participants: [],
+            
+            // Resources
+            resources: programData.resources || [],
+            budget: programData.budget || 0,
+            sponsors: programData.sponsors || []
+        }, { suppressAuth: true });
+        
+        return { success: true, programId: program._id, program };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
+}
+
+/**
+ * Get community dashboard
+ */
+export async function getCommunityDashboard(userId) {
+    try {
+        const [initiatives, donations, volunteers, programs, scholarships] = await Promise.all([
+            wixData.query('CommunityInitiatives').eq('status', 'active').find({ suppressAuth: true }),
+            wixData.query('CommunityDonations').find({ suppressAuth: true }),
+            wixData.query('CommunityVolunteers').find({ suppressAuth: true }),
+            wixData.query('CommunityPrograms').eq('status', 'active').find({ suppressAuth: true }),
+            wixData.query('Scholarships').eq('status', 'active').find({ suppressAuth: true })
+        ]);
+        
+        // Calculate totals
+        const totalDonations = donations.items
+            .filter(d => d.donationType === DONATION_TYPES.MONETARY)
+            .reduce((sum, d) => sum + (d.amount || 0), 0);
+        
+        const totalVolunteerHours = await wixData.query('VolunteerHours')
+            .find({ suppressAuth: true })
+            .then(result => result.items.reduce((sum, h) => sum + (h.hours || 0), 0));
+        
+        return {
+            success: true,
+            dashboard: {
+                activeInitiatives: initiatives.items.length,
+                totalDonations,
+                totalVolunteers: new Set(volunteers.items.map(v => v.userId)).size,
+                totalVolunteerHours,
+                activePrograms: programs.items.length,
+                activeScholarships: scholarships.items.length,
+                
+                // Recent activity
+                recentInitiatives: initiatives.items.slice(0, 5),
+                recentDonations: donations.items
+                    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+                    .slice(0, 5),
+                
+                // Impact metrics
+                impactMetrics: {
+                    livesImpacted: calculateLivesImpacted(initiatives.items),
+                    communitiesServed: calculateCommunitiesServed(initiatives.items),
+                    scholarshipsAwarded: await getScholarshipsAwardedCount()
+                },
+                
+                // Upcoming
+                upcomingEvents: await getUpcomingCommunityEvents()
+            }
+        };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
+}
+
+/**
+ * Get initiative details with full metrics
+ */
+export async function getInitiativeDetails(initiativeId) {
+    try {
+        const initiative = await wixData.get('CommunityInitiatives', initiativeId, { suppressAuth: true });
+        if (!initiative) {
+            return { success: false, error: 'Initiative not found' };
+        }
+        
+        // Get donations for this initiative
+        const donations = await wixData.query('CommunityDonations')
+            .eq('initiativeId', initiativeId)
+            .find({ suppressAuth: true });
+        
+        // Get volunteers
+        const volunteers = await wixData.query('CommunityVolunteers')
+            .eq('initiativeId', initiativeId)
+            .find({ suppressAuth: true });
+        
+        // Get volunteer hours
+        const hours = await wixData.query('VolunteerHours')
+            .eq('initiativeId', initiativeId)
+            .find({ suppressAuth: true });
+        
+        return {
+            success: true,
+            initiative: {
+                ...initiative,
+                donations: donations.items,
+                volunteers: volunteers.items,
+                volunteerHours: hours.items,
+                
+                // Progress
+                progress: {
+                    fundingProgress: initiative.goalAmount > 0 
+                        ? ((initiative.currentAmount / initiative.goalAmount) * 100).toFixed(1) 
+                        : 0,
+                    participantProgress: initiative.goalParticipants > 0
+                        ? ((initiative.currentParticipants / initiative.goalParticipants) * 100).toFixed(1)
+                        : 0,
+                    volunteerHoursProgress: initiative.volunteerHoursGoal > 0
+                        ? ((initiative.volunteerHoursLogged / initiative.volunteerHoursGoal) * 100).toFixed(1)
+                        : 0
+                }
+            }
+        };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
+}
+
+// Helper functions
+async function notifyInitiativeCreated(initiative) {
+    // Implementation for notifying community leads
+}
+
+async function generateDonationReceipt(donation) {
+    // Implementation for generating tax receipt
+    await wixData.update('CommunityDonations', {
+        ...donation,
+        receiptGenerated: true,
+        receiptNumber: `BANF-DON-${Date.now()}`
+    }, { suppressAuth: true });
+}
+
+async function notifyMentorMatch(match) {
+    // Implementation for notifying mentor
+}
+
+function calculateLivesImpacted(initiatives) {
+    return initiatives.reduce((sum, i) => sum + (i.currentParticipants || 0), 0);
+}
+
+function calculateCommunitiesServed(initiatives) {
+    const locations = new Set(initiatives.map(i => i.location).filter(l => l));
+    return locations.size;
+}
+
+async function getScholarshipsAwardedCount() {
+    const awarded = await wixData.query('ScholarshipApplications')
+        .eq('status', 'awarded')
+        .count({ suppressAuth: true });
+    return awarded;
+}
+
+async function getUpcomingCommunityEvents() {
+    const events = await wixData.query('CommunityInitiatives')
+        .eq('status', 'active')
+        .ge('startDate', new Date())
+        .ascending('startDate')
+        .limit(5)
+        .find({ suppressAuth: true });
+    return events.items;
+}
+
+/**
+ * Export donation report for tax purposes
+ */
+export async function exportDonationReport(year, userId) {
+    try {
+        const hasPermission = await hasSpecializedPermission(userId, 'community_reports');
+        if (!hasPermission) {
+            return { success: false, error: 'Not authorized' };
+        }
+        
+        const startDate = new Date(year, 0, 1);
+        const endDate = new Date(year, 11, 31, 23, 59, 59);
+        
+        const donations = await wixData.query('CommunityDonations')
+            .ge('createdAt', startDate)
+            .le('createdAt', endDate)
+            .eq('taxDeductible', true)
+            .find({ suppressAuth: true });
+        
+        // Group by donor
+        const byDonor = {};
+        donations.items.forEach(d => {
+            if (!byDonor[d.donorId]) {
+                byDonor[d.donorId] = {
+                    donorId: d.donorId,
+                    donations: [],
+                    total: 0
+                };
+            }
+            byDonor[d.donorId].donations.push(d);
+            if (d.donationType === DONATION_TYPES.MONETARY) {
+                byDonor[d.donorId].total += d.amount || 0;
+            }
+        });
+        
+        return {
+            success: true,
+            report: {
+                year,
+                totalDonations: donations.items.reduce((sum, d) => 
+                    d.donationType === DONATION_TYPES.MONETARY ? sum + (d.amount || 0) : sum, 0),
+                donorCount: Object.keys(byDonor).length,
+                donationCount: donations.items.length,
+                byDonor: Object.values(byDonor)
+            }
+        };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
+}

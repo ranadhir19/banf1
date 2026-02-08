@@ -1,0 +1,329 @@
+/**
+ * BANF Specialized Admin Roles Module
+ * Extended admin roles for specific feature management
+ * 
+ * File: backend/specialized-admin-roles.jsw
+ * Deploy to: Wix Velo Backend
+ */
+
+import wixData from 'wix-data';
+import { logAdminActivity } from 'backend/admin-auth.jsw';
+
+// Extended Specialized Admin Roles
+export const SPECIALIZED_ROLES = {
+    // Content & Media Roles
+    MAGAZINE_EDITOR: 'magazine_editor',           // E-magazine management
+    MAGAZINE_REVIEWER: 'magazine_reviewer',       // Article review only
+    RADIO_MANAGER: 'radio_manager',               // Full radio control
+    RADIO_DJ: 'radio_dj',                         // Live streaming only
+    VIDEO_COORDINATOR: 'video_coordinator',       // Video content scheduling
+    GALLERY_MANAGER: 'gallery_manager',           // Photo/video gallery
+    
+    // Events & Operations
+    EVENT_COORDINATOR: 'event_coordinator',       // Specific event management
+    VOLUNTEER_COORDINATOR: 'volunteer_coordinator', // Volunteer management
+    VENDOR_COORDINATOR: 'vendor_coordinator',     // Vendor management
+    
+    // Marketing & Engagement
+    AD_MANAGER: 'ad_manager',                     // Advertisement management
+    SOCIAL_MEDIA_MANAGER: 'social_media_manager', // Social media integration
+    COMMUNITY_LEAD: 'community_lead',             // Community initiatives
+    
+    // Analytics & Reporting
+    REPORT_ANALYST: 'report_analyst',             // Report generation
+    DATA_ANALYST: 'data_analyst',                 // Full analytics access
+    
+    // Support
+    GUIDE_EDITOR: 'guide_editor',                 // Jacksonville guide content
+    SURVEY_COORDINATOR: 'survey_coordinator'      // Survey management
+};
+
+// Specialized Role Permissions Matrix
+const SPECIALIZED_PERMISSIONS = {
+    magazine_editor: {
+        permissions: ['magazine_full', 'magazine_publish', 'magazine_review', 'magazine_edit', 'magazine_delete'],
+        description: 'Full control over e-magazine content and publishing',
+        canApprove: true,
+        canDelete: true
+    },
+    magazine_reviewer: {
+        permissions: ['magazine_review', 'magazine_comment'],
+        description: 'Review and comment on submitted articles',
+        canApprove: false,
+        canDelete: false
+    },
+    radio_manager: {
+        permissions: ['radio_full', 'radio_schedule', 'radio_live', 'radio_playlist', 'radio_settings'],
+        description: 'Full control over radio programming and settings',
+        canApprove: true,
+        canDelete: true
+    },
+    radio_dj: {
+        permissions: ['radio_live', 'radio_playlist_readonly', 'radio_request'],
+        description: 'Live streaming and music playback only',
+        canApprove: false,
+        canDelete: false
+    },
+    video_coordinator: {
+        permissions: ['video_upload', 'video_schedule', 'video_edit', 'video_publish'],
+        description: 'Video content management and scheduling',
+        canApprove: true,
+        canDelete: false
+    },
+    gallery_manager: {
+        permissions: ['gallery_full', 'gallery_upload', 'gallery_organize', 'gallery_delete'],
+        description: 'Photo and video gallery management',
+        canApprove: true,
+        canDelete: true
+    },
+    event_coordinator: {
+        permissions: ['events_manage', 'events_checkin', 'events_reports'],
+        description: 'Specific event operations (assigned events only)',
+        canApprove: false,
+        canDelete: false,
+        scopeLimit: 'assigned_events'
+    },
+    volunteer_coordinator: {
+        permissions: ['volunteer_full', 'volunteer_assign', 'volunteer_hours', 'volunteer_reports'],
+        description: 'Volunteer recruitment and coordination',
+        canApprove: true,
+        canDelete: false
+    },
+    vendor_coordinator: {
+        permissions: ['vendor_review', 'vendor_communicate', 'vendor_booth'],
+        description: 'Vendor communication and booth management',
+        canApprove: false,
+        canDelete: false
+    },
+    ad_manager: {
+        permissions: ['ads_full', 'ads_create', 'ads_schedule', 'ads_analytics', 'ads_billing'],
+        description: 'Advertisement campaign management',
+        canApprove: true,
+        canDelete: true
+    },
+    social_media_manager: {
+        permissions: ['social_post', 'social_schedule', 'social_analytics'],
+        description: 'Social media integration and posting',
+        canApprove: true,
+        canDelete: false
+    },
+    community_lead: {
+        permissions: ['community_full', 'charity_manage', 'career_manage', 'initiatives_manage'],
+        description: 'Community engagement and initiatives',
+        canApprove: true,
+        canDelete: false
+    },
+    report_analyst: {
+        permissions: ['reports_generate', 'reports_view', 'reports_export'],
+        description: 'Generate and export reports',
+        canApprove: false,
+        canDelete: false
+    },
+    data_analyst: {
+        permissions: ['analytics_full', 'insights_view', 'reports_full', 'data_export'],
+        description: 'Full analytics and data access',
+        canApprove: false,
+        canDelete: false
+    },
+    guide_editor: {
+        permissions: ['guide_full', 'guide_approve', 'guide_edit'],
+        description: 'Jacksonville guide content management',
+        canApprove: true,
+        canDelete: true
+    },
+    survey_coordinator: {
+        permissions: ['survey_create', 'survey_manage', 'survey_analyze'],
+        description: 'Survey creation and analysis',
+        canApprove: true,
+        canDelete: false
+    }
+};
+
+/**
+ * Assign specialized role to a user
+ * @param {string} userId - User to assign role
+ * @param {string} specializedRole - Role from SPECIALIZED_ROLES
+ * @param {object} options - Additional options (scope, expiry, etc.)
+ * @param {string} assignedBy - Admin assigning the role
+ */
+export async function assignSpecializedRole(userId, specializedRole, options = {}, assignedBy) {
+    try {
+        // Validate role exists
+        if (!SPECIALIZED_PERMISSIONS[specializedRole]) {
+            return { success: false, error: 'Invalid specialized role' };
+        }
+        
+        // Check if user already has this role
+        const existing = await wixData.query('SpecializedRoles')
+            .eq('userId', userId)
+            .eq('role', specializedRole)
+            .eq('isActive', true)
+            .find({ suppressAuth: true });
+        
+        if (existing.items.length > 0) {
+            return { success: false, error: 'User already has this role' };
+        }
+        
+        const roleAssignment = {
+            userId,
+            role: specializedRole,
+            permissions: SPECIALIZED_PERMISSIONS[specializedRole].permissions,
+            canApprove: SPECIALIZED_PERMISSIONS[specializedRole].canApprove,
+            canDelete: SPECIALIZED_PERMISSIONS[specializedRole].canDelete,
+            scopeLimit: options.scopeLimit || SPECIALIZED_PERMISSIONS[specializedRole].scopeLimit || null,
+            assignedEvents: options.assignedEvents || [],
+            expiryDate: options.expiryDate || null,
+            isActive: true,
+            assignedBy,
+            assignedAt: new Date(),
+            notes: options.notes || ''
+        };
+        
+        const result = await wixData.insert('SpecializedRoles', roleAssignment, { suppressAuth: true });
+        
+        await logAdminActivity(assignedBy, 'role_assigned', 
+            `Assigned ${specializedRole} to user ${userId}`);
+        
+        return {
+            success: true,
+            roleAssignmentId: result._id,
+            permissions: roleAssignment.permissions
+        };
+    } catch (error) {
+        console.error('Role assignment failed:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+/**
+ * Remove specialized role from user
+ */
+export async function removeSpecializedRole(userId, specializedRole, removedBy) {
+    try {
+        const existing = await wixData.query('SpecializedRoles')
+            .eq('userId', userId)
+            .eq('role', specializedRole)
+            .eq('isActive', true)
+            .find({ suppressAuth: true });
+        
+        if (existing.items.length === 0) {
+            return { success: false, error: 'Role assignment not found' };
+        }
+        
+        await wixData.update('SpecializedRoles', {
+            ...existing.items[0],
+            isActive: false,
+            revokedBy: removedBy,
+            revokedAt: new Date()
+        }, { suppressAuth: true });
+        
+        await logAdminActivity(removedBy, 'role_revoked', 
+            `Revoked ${specializedRole} from user ${userId}`);
+        
+        return { success: true, message: 'Role removed successfully' };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
+}
+
+/**
+ * Check if user has specialized permission
+ */
+export async function hasSpecializedPermission(userId, permission) {
+    try {
+        const roles = await wixData.query('SpecializedRoles')
+            .eq('userId', userId)
+            .eq('isActive', true)
+            .find({ suppressAuth: true });
+        
+        for (const role of roles.items) {
+            // Check expiry
+            if (role.expiryDate && new Date(role.expiryDate) < new Date()) {
+                continue;
+            }
+            
+            if (role.permissions.includes(permission)) {
+                return true;
+            }
+        }
+        
+        return false;
+    } catch (error) {
+        console.error('Permission check failed:', error);
+        return false;
+    }
+}
+
+/**
+ * Get all specialized roles for a user
+ */
+export async function getUserSpecializedRoles(userId) {
+    try {
+        const roles = await wixData.query('SpecializedRoles')
+            .eq('userId', userId)
+            .eq('isActive', true)
+            .find({ suppressAuth: true });
+        
+        return {
+            success: true,
+            roles: roles.items.map(r => ({
+                role: r.role,
+                permissions: r.permissions,
+                canApprove: r.canApprove,
+                canDelete: r.canDelete,
+                assignedAt: r.assignedAt,
+                expiryDate: r.expiryDate
+            }))
+        };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
+}
+
+/**
+ * Get all users with a specific specialized role
+ */
+export async function getUsersBySpecializedRole(role) {
+    try {
+        const assignments = await wixData.query('SpecializedRoles')
+            .eq('role', role)
+            .eq('isActive', true)
+            .find({ suppressAuth: true });
+        
+        return {
+            success: true,
+            users: assignments.items.map(a => ({
+                userId: a.userId,
+                assignedAt: a.assignedAt,
+                assignedBy: a.assignedBy
+            }))
+        };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
+}
+
+/**
+ * Get role metadata
+ */
+export function getRoleMetadata(role) {
+    if (!SPECIALIZED_PERMISSIONS[role]) {
+        return null;
+    }
+    
+    return {
+        role,
+        ...SPECIALIZED_PERMISSIONS[role]
+    };
+}
+
+/**
+ * Get all available specialized roles
+ */
+export function getAllSpecializedRoles() {
+    return Object.entries(SPECIALIZED_ROLES).map(([key, value]) => ({
+        key,
+        value,
+        metadata: SPECIALIZED_PERMISSIONS[value]
+    }));
+}

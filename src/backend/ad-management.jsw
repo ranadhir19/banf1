@@ -1,0 +1,896 @@
+/**
+ * BANF Advertisement Management Module
+ * Google Ads-like system for vendor/sponsor advertising
+ * 
+ * File: backend/ad-management.jsw
+ * Deploy to: Wix Velo Backend
+ */
+
+import wixData from 'wix-data';
+import { currentUser } from 'wix-users-backend';
+import { hasSpecializedPermission } from 'backend/specialized-admin-roles.jsw';
+
+// Ad Types
+export const AD_TYPES = {
+    BANNER: 'banner',           // Website banners
+    SIDEBAR: 'sidebar',         // Sidebar ads
+    POPUP: 'popup',             // Popup/modal ads
+    VIDEO: 'video',             // Video ads
+    NATIVE: 'native',           // Native content ads
+    SPONSORED: 'sponsored',     // Sponsored content
+    CAROUSEL: 'carousel',       // Multi-image carousel
+    NEWSLETTER: 'newsletter',   // Email newsletter ads
+    SOCIAL: 'social'            // Social media ads
+};
+
+// Ad Placements
+export const AD_PLACEMENTS = {
+    // Website Placements
+    HOME_HERO: 'home_hero',
+    HOME_SIDEBAR: 'home_sidebar',
+    HOME_FOOTER: 'home_footer',
+    EVENT_PAGE: 'event_page',
+    MEMBER_DIRECTORY: 'member_directory',
+    MAGAZINE_PAGE: 'magazine_page',
+    GALLERY_PAGE: 'gallery_page',
+    
+    // External Placements
+    FACEBOOK: 'facebook',
+    INSTAGRAM: 'instagram',
+    TWITTER: 'twitter',
+    LINKEDIN: 'linkedin',
+    YOUTUBE: 'youtube',
+    EMAIL_NEWSLETTER: 'email_newsletter',
+    MOBILE_APP: 'mobile_app'
+};
+
+// Billing Models
+export const BILLING_MODELS = {
+    CPM: 'cpm',         // Cost Per Mille (1000 impressions)
+    CPC: 'cpc',         // Cost Per Click
+    CPV: 'cpv',         // Cost Per View (video)
+    CPA: 'cpa',         // Cost Per Action/Acquisition
+    FLAT_RATE: 'flat',  // Flat rate for time period
+    SPONSORSHIP: 'sponsorship' // Sponsorship package
+};
+
+// Ad Status
+export const AD_STATUS = {
+    DRAFT: 'draft',
+    PENDING_REVIEW: 'pending_review',
+    APPROVED: 'approved',
+    ACTIVE: 'active',
+    PAUSED: 'paused',
+    REJECTED: 'rejected',
+    COMPLETED: 'completed',
+    EXPIRED: 'expired'
+};
+
+// ==================== CAMPAIGN MANAGEMENT ====================
+
+/**
+ * Create advertising campaign
+ */
+export async function createCampaign(campaignData, advertiserId) {
+    try {
+        const campaign = await wixData.insert('AdCampaigns', {
+            ...campaignData,
+            advertiserId,
+            status: AD_STATUS.DRAFT,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            
+            // Campaign settings
+            name: campaignData.name,
+            objective: campaignData.objective, // 'awareness', 'traffic', 'conversions', 'engagement'
+            budget: {
+                total: campaignData.totalBudget || 0,
+                daily: campaignData.dailyBudget || 0,
+                spent: 0,
+                remaining: campaignData.totalBudget || 0
+            },
+            schedule: {
+                startDate: campaignData.startDate,
+                endDate: campaignData.endDate,
+                timezone: campaignData.timezone || 'America/New_York'
+            },
+            
+            // Targeting
+            targeting: {
+                locations: campaignData.targetLocations || ['US'],
+                ageRange: campaignData.ageRange || { min: 18, max: 65 },
+                memberTypes: campaignData.memberTypes || ['all'],
+                interests: campaignData.interests || [],
+                eventAttendees: campaignData.eventAttendees || false
+            },
+            
+            // Bidding
+            bidding: {
+                model: campaignData.billingModel || BILLING_MODELS.CPM,
+                maxBid: campaignData.maxBid || 0,
+                autobid: campaignData.autobid !== false
+            },
+            
+            // Tracking
+            ads: [],
+            metrics: {
+                impressions: 0,
+                clicks: 0,
+                conversions: 0,
+                spend: 0
+            }
+        }, { suppressAuth: true });
+        
+        return { success: true, campaignId: campaign._id, campaign };
+    } catch (error) {
+        console.error('Create campaign failed:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+/**
+ * Create advertisement within campaign
+ */
+export async function createAd(campaignId, adData, advertiserId) {
+    try {
+        const campaign = await wixData.get('AdCampaigns', campaignId, { suppressAuth: true });
+        if (!campaign || campaign.advertiserId !== advertiserId) {
+            return { success: false, error: 'Campaign not found or unauthorized' };
+        }
+        
+        const ad = await wixData.insert('Advertisements', {
+            campaignId,
+            advertiserId,
+            status: AD_STATUS.PENDING_REVIEW,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            
+            // Ad Content
+            adType: adData.type || AD_TYPES.BANNER,
+            placement: adData.placement || AD_PLACEMENTS.HOME_SIDEBAR,
+            
+            headline: adData.headline,
+            description: adData.description,
+            callToAction: adData.callToAction || 'Learn More',
+            destinationUrl: adData.destinationUrl,
+            
+            // Creative Assets
+            assets: {
+                primaryImage: adData.primaryImage,
+                secondaryImages: adData.secondaryImages || [],
+                video: adData.video,
+                logo: adData.logo
+            },
+            
+            // Dimensions
+            dimensions: getAdDimensions(adData.type, adData.placement),
+            
+            // Tracking
+            metrics: {
+                impressions: 0,
+                clicks: 0,
+                ctr: 0,
+                conversions: 0,
+                spend: 0
+            },
+            
+            // UTM Parameters
+            utmParams: {
+                source: 'banf',
+                medium: adData.type,
+                campaign: campaign.name,
+                content: adData.headline
+            }
+        }, { suppressAuth: true });
+        
+        // Add ad to campaign
+        await wixData.update('AdCampaigns', {
+            ...campaign,
+            ads: [...campaign.ads, ad._id],
+            updatedAt: new Date()
+        }, { suppressAuth: true });
+        
+        return { success: true, adId: ad._id, ad };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
+}
+
+/**
+ * Get ad dimensions based on type and placement
+ */
+function getAdDimensions(adType, placement) {
+    const dimensions = {
+        [AD_TYPES.BANNER]: {
+            [AD_PLACEMENTS.HOME_HERO]: { width: 1200, height: 400 },
+            [AD_PLACEMENTS.HOME_FOOTER]: { width: 728, height: 90 },
+            default: { width: 728, height: 90 }
+        },
+        [AD_TYPES.SIDEBAR]: {
+            default: { width: 300, height: 250 }
+        },
+        [AD_TYPES.VIDEO]: {
+            default: { width: 640, height: 360 }
+        },
+        [AD_TYPES.SOCIAL]: {
+            [AD_PLACEMENTS.FACEBOOK]: { width: 1200, height: 628 },
+            [AD_PLACEMENTS.INSTAGRAM]: { width: 1080, height: 1080 },
+            default: { width: 1200, height: 628 }
+        }
+    };
+    
+    return dimensions[adType]?.[placement] || dimensions[adType]?.default || { width: 300, height: 250 };
+}
+
+/**
+ * Review and approve/reject ad
+ */
+export async function reviewAd(adId, decision, reviewNotes, reviewerId) {
+    try {
+        const hasPermission = await hasSpecializedPermission(reviewerId, 'ads_approve');
+        if (!hasPermission) {
+            return { success: false, error: 'Not authorized to review ads' };
+        }
+        
+        const ad = await wixData.get('Advertisements', adId, { suppressAuth: true });
+        if (!ad) {
+            return { success: false, error: 'Ad not found' };
+        }
+        
+        const newStatus = decision === 'approve' ? AD_STATUS.APPROVED : AD_STATUS.REJECTED;
+        
+        const updated = await wixData.update('Advertisements', {
+            ...ad,
+            status: newStatus,
+            reviewedBy: reviewerId,
+            reviewedAt: new Date(),
+            reviewNotes,
+            updatedAt: new Date()
+        }, { suppressAuth: true });
+        
+        // Notify advertiser
+        await notifyAdReviewResult(ad, newStatus, reviewNotes);
+        
+        return { success: true, ad: updated };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
+}
+
+/**
+ * Start/pause campaign
+ */
+export async function updateCampaignStatus(campaignId, newStatus, advertiserId) {
+    try {
+        const campaign = await wixData.get('AdCampaigns', campaignId, { suppressAuth: true });
+        if (!campaign || campaign.advertiserId !== advertiserId) {
+            return { success: false, error: 'Campaign not found or unauthorized' };
+        }
+        
+        // Validate status transition
+        const validTransitions = {
+            [AD_STATUS.DRAFT]: [AD_STATUS.PENDING_REVIEW],
+            [AD_STATUS.APPROVED]: [AD_STATUS.ACTIVE, AD_STATUS.PAUSED],
+            [AD_STATUS.ACTIVE]: [AD_STATUS.PAUSED],
+            [AD_STATUS.PAUSED]: [AD_STATUS.ACTIVE]
+        };
+        
+        if (!validTransitions[campaign.status]?.includes(newStatus)) {
+            return { success: false, error: 'Invalid status transition' };
+        }
+        
+        const updated = await wixData.update('AdCampaigns', {
+            ...campaign,
+            status: newStatus,
+            updatedAt: new Date()
+        }, { suppressAuth: true });
+        
+        // Update all ads in campaign
+        if (newStatus === AD_STATUS.ACTIVE || newStatus === AD_STATUS.PAUSED) {
+            await updateCampaignAdsStatus(campaignId, newStatus);
+        }
+        
+        return { success: true, campaign: updated };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
+}
+
+async function updateCampaignAdsStatus(campaignId, status) {
+    const ads = await wixData.query('Advertisements')
+        .eq('campaignId', campaignId)
+        .eq('status', AD_STATUS.APPROVED)
+        .find({ suppressAuth: true });
+    
+    for (const ad of ads.items) {
+        await wixData.update('Advertisements', {
+            ...ad,
+            status,
+            updatedAt: new Date()
+        }, { suppressAuth: true });
+    }
+}
+
+// ==================== AD SERVING ====================
+
+/**
+ * Get ads for a specific placement (called by frontend)
+ */
+export async function getAdsForPlacement(placement, context = {}) {
+    try {
+        const now = new Date();
+        
+        // Query active ads for this placement
+        const ads = await wixData.query('Advertisements')
+            .eq('placement', placement)
+            .eq('status', AD_STATUS.ACTIVE)
+            .find({ suppressAuth: true });
+        
+        // Filter by campaign status and budget
+        const eligibleAds = [];
+        
+        for (const ad of ads.items) {
+            const campaign = await wixData.get('AdCampaigns', ad.campaignId, { suppressAuth: true });
+            
+            if (campaign && 
+                campaign.status === AD_STATUS.ACTIVE &&
+                new Date(campaign.schedule.startDate) <= now &&
+                new Date(campaign.schedule.endDate) >= now &&
+                campaign.budget.remaining > 0) {
+                
+                // Check targeting
+                if (matchesTargeting(campaign.targeting, context)) {
+                    eligibleAds.push({
+                        ...ad,
+                        campaignBudget: campaign.budget
+                    });
+                }
+            }
+        }
+        
+        // Sort by bid and quality score
+        eligibleAds.sort((a, b) => {
+            const scoreA = a.qualityScore || 1;
+            const scoreB = b.qualityScore || 1;
+            return (b.maxBid * scoreB) - (a.maxBid * scoreA);
+        });
+        
+        // Return top ad(s)
+        const selectedAd = eligibleAds[0];
+        
+        if (selectedAd) {
+            // Record impression
+            await recordImpression(selectedAd._id);
+            
+            return {
+                success: true,
+                ad: {
+                    adId: selectedAd._id,
+                    adType: selectedAd.adType,
+                    headline: selectedAd.headline,
+                    description: selectedAd.description,
+                    callToAction: selectedAd.callToAction,
+                    destinationUrl: addTrackingParams(selectedAd.destinationUrl, selectedAd.utmParams),
+                    assets: selectedAd.assets,
+                    dimensions: selectedAd.dimensions
+                }
+            };
+        }
+        
+        return { success: true, ad: null };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
+}
+
+/**
+ * Check if campaign targeting matches context
+ */
+function matchesTargeting(targeting, context) {
+    // Location targeting
+    if (targeting.locations && targeting.locations.length > 0) {
+        if (!targeting.locations.includes('all') && 
+            !targeting.locations.includes(context.location)) {
+            return false;
+        }
+    }
+    
+    // Member type targeting
+    if (targeting.memberTypes && targeting.memberTypes.length > 0) {
+        if (!targeting.memberTypes.includes('all') && 
+            !targeting.memberTypes.includes(context.memberType)) {
+            return false;
+        }
+    }
+    
+    return true;
+}
+
+/**
+ * Add UTM tracking parameters
+ */
+function addTrackingParams(url, utmParams) {
+    if (!url) return url;
+    
+    const separator = url.includes('?') ? '&' : '?';
+    const params = Object.entries(utmParams)
+        .map(([key, value]) => `utm_${key}=${encodeURIComponent(value)}`)
+        .join('&');
+    
+    return `${url}${separator}${params}`;
+}
+
+/**
+ * Record ad impression
+ */
+export async function recordImpression(adId) {
+    try {
+        const ad = await wixData.get('Advertisements', adId, { suppressAuth: true });
+        if (!ad) return;
+        
+        // Update ad metrics
+        await wixData.update('Advertisements', {
+            ...ad,
+            metrics: {
+                ...ad.metrics,
+                impressions: (ad.metrics?.impressions || 0) + 1
+            }
+        }, { suppressAuth: true });
+        
+        // Update campaign metrics
+        const campaign = await wixData.get('AdCampaigns', ad.campaignId, { suppressAuth: true });
+        if (campaign) {
+            const cost = campaign.bidding.model === BILLING_MODELS.CPM 
+                ? (campaign.bidding.maxBid / 1000) 
+                : 0;
+            
+            await wixData.update('AdCampaigns', {
+                ...campaign,
+                metrics: {
+                    ...campaign.metrics,
+                    impressions: (campaign.metrics?.impressions || 0) + 1,
+                    spend: (campaign.metrics?.spend || 0) + cost
+                },
+                budget: {
+                    ...campaign.budget,
+                    spent: (campaign.budget?.spent || 0) + cost,
+                    remaining: (campaign.budget?.remaining || 0) - cost
+                }
+            }, { suppressAuth: true });
+        }
+        
+        // Log to metrics table
+        await wixData.insert('AdMetrics', {
+            adId,
+            campaignId: ad.campaignId,
+            eventType: 'impression',
+            timestamp: new Date(),
+            context: {}
+        }, { suppressAuth: true });
+        
+    } catch (error) {
+        console.error('Record impression failed:', error);
+    }
+}
+
+/**
+ * Record ad click
+ */
+export async function recordClick(adId, clickData = {}) {
+    try {
+        const ad = await wixData.get('Advertisements', adId, { suppressAuth: true });
+        if (!ad) return { success: false };
+        
+        // Update ad metrics
+        const newClicks = (ad.metrics?.clicks || 0) + 1;
+        const newImpressions = ad.metrics?.impressions || 1;
+        
+        await wixData.update('Advertisements', {
+            ...ad,
+            metrics: {
+                ...ad.metrics,
+                clicks: newClicks,
+                ctr: ((newClicks / newImpressions) * 100).toFixed(2)
+            }
+        }, { suppressAuth: true });
+        
+        // Update campaign metrics and budget (for CPC billing)
+        const campaign = await wixData.get('AdCampaigns', ad.campaignId, { suppressAuth: true });
+        if (campaign) {
+            const cost = campaign.bidding.model === BILLING_MODELS.CPC 
+                ? campaign.bidding.maxBid 
+                : 0;
+            
+            await wixData.update('AdCampaigns', {
+                ...campaign,
+                metrics: {
+                    ...campaign.metrics,
+                    clicks: (campaign.metrics?.clicks || 0) + 1,
+                    spend: (campaign.metrics?.spend || 0) + cost
+                },
+                budget: {
+                    ...campaign.budget,
+                    spent: (campaign.budget?.spent || 0) + cost,
+                    remaining: (campaign.budget?.remaining || 0) - cost
+                }
+            }, { suppressAuth: true });
+        }
+        
+        // Log click
+        await wixData.insert('AdMetrics', {
+            adId,
+            campaignId: ad.campaignId,
+            eventType: 'click',
+            timestamp: new Date(),
+            context: clickData
+        }, { suppressAuth: true });
+        
+        return { success: true, destinationUrl: ad.destinationUrl };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
+}
+
+/**
+ * Record conversion
+ */
+export async function recordConversion(adId, conversionData = {}) {
+    try {
+        const ad = await wixData.get('Advertisements', adId, { suppressAuth: true });
+        if (!ad) return { success: false };
+        
+        await wixData.update('Advertisements', {
+            ...ad,
+            metrics: {
+                ...ad.metrics,
+                conversions: (ad.metrics?.conversions || 0) + 1
+            }
+        }, { suppressAuth: true });
+        
+        // Update campaign (for CPA billing)
+        const campaign = await wixData.get('AdCampaigns', ad.campaignId, { suppressAuth: true });
+        if (campaign) {
+            const cost = campaign.bidding.model === BILLING_MODELS.CPA 
+                ? campaign.bidding.maxBid 
+                : 0;
+            
+            await wixData.update('AdCampaigns', {
+                ...campaign,
+                metrics: {
+                    ...campaign.metrics,
+                    conversions: (campaign.metrics?.conversions || 0) + 1,
+                    spend: (campaign.metrics?.spend || 0) + cost
+                },
+                budget: {
+                    ...campaign.budget,
+                    spent: (campaign.budget?.spent || 0) + cost,
+                    remaining: (campaign.budget?.remaining || 0) - cost
+                }
+            }, { suppressAuth: true });
+        }
+        
+        // Log conversion
+        await wixData.insert('AdMetrics', {
+            adId,
+            campaignId: ad.campaignId,
+            eventType: 'conversion',
+            timestamp: new Date(),
+            conversionValue: conversionData.value || 0,
+            conversionType: conversionData.type || 'general',
+            context: conversionData
+        }, { suppressAuth: true });
+        
+        return { success: true };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
+}
+
+// ==================== REPORTING & ANALYTICS ====================
+
+/**
+ * Get campaign performance report
+ */
+export async function getCampaignReport(campaignId, dateRange, advertiserId) {
+    try {
+        const campaign = await wixData.get('AdCampaigns', campaignId, { suppressAuth: true });
+        if (!campaign || campaign.advertiserId !== advertiserId) {
+            return { success: false, error: 'Campaign not found or unauthorized' };
+        }
+        
+        // Get metrics for date range
+        const metrics = await wixData.query('AdMetrics')
+            .eq('campaignId', campaignId)
+            .ge('timestamp', dateRange.start)
+            .le('timestamp', dateRange.end)
+            .find({ suppressAuth: true });
+        
+        // Aggregate metrics
+        const impressions = metrics.items.filter(m => m.eventType === 'impression').length;
+        const clicks = metrics.items.filter(m => m.eventType === 'click').length;
+        const conversions = metrics.items.filter(m => m.eventType === 'conversion').length;
+        
+        // Daily breakdown
+        const dailyMetrics = {};
+        metrics.items.forEach(m => {
+            const day = new Date(m.timestamp).toISOString().split('T')[0];
+            if (!dailyMetrics[day]) {
+                dailyMetrics[day] = { impressions: 0, clicks: 0, conversions: 0 };
+            }
+            dailyMetrics[day][m.eventType === 'impression' ? 'impressions' : 
+                           m.eventType === 'click' ? 'clicks' : 'conversions']++;
+        });
+        
+        // Calculate ROI
+        const totalSpend = campaign.metrics?.spend || 0;
+        const conversionValue = metrics.items
+            .filter(m => m.eventType === 'conversion')
+            .reduce((sum, m) => sum + (m.conversionValue || 0), 0);
+        const roi = totalSpend > 0 ? ((conversionValue - totalSpend) / totalSpend * 100).toFixed(2) : 0;
+        
+        return {
+            success: true,
+            report: {
+                campaign: {
+                    id: campaign._id,
+                    name: campaign.name,
+                    status: campaign.status
+                },
+                dateRange,
+                totals: {
+                    impressions,
+                    clicks,
+                    conversions,
+                    spend: totalSpend,
+                    ctr: impressions > 0 ? ((clicks / impressions) * 100).toFixed(2) : 0,
+                    conversionRate: clicks > 0 ? ((conversions / clicks) * 100).toFixed(2) : 0,
+                    cpc: clicks > 0 ? (totalSpend / clicks).toFixed(2) : 0,
+                    cpm: impressions > 0 ? ((totalSpend / impressions) * 1000).toFixed(2) : 0,
+                    roi
+                },
+                dailyBreakdown: dailyMetrics,
+                budget: campaign.budget
+            }
+        };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
+}
+
+/**
+ * Get advertiser dashboard
+ */
+export async function getAdvertiserDashboard(advertiserId) {
+    try {
+        const campaigns = await wixData.query('AdCampaigns')
+            .eq('advertiserId', advertiserId)
+            .find({ suppressAuth: true });
+        
+        const activeCampaigns = campaigns.items.filter(c => c.status === AD_STATUS.ACTIVE);
+        
+        // Aggregate metrics
+        const totalSpend = campaigns.items.reduce((sum, c) => sum + (c.metrics?.spend || 0), 0);
+        const totalImpressions = campaigns.items.reduce((sum, c) => sum + (c.metrics?.impressions || 0), 0);
+        const totalClicks = campaigns.items.reduce((sum, c) => sum + (c.metrics?.clicks || 0), 0);
+        const totalConversions = campaigns.items.reduce((sum, c) => sum + (c.metrics?.conversions || 0), 0);
+        
+        return {
+            success: true,
+            dashboard: {
+                totalCampaigns: campaigns.items.length,
+                activeCampaigns: activeCampaigns.length,
+                metrics: {
+                    totalSpend,
+                    totalImpressions,
+                    totalClicks,
+                    totalConversions,
+                    overallCTR: totalImpressions > 0 ? ((totalClicks / totalImpressions) * 100).toFixed(2) : 0,
+                    overallConversionRate: totalClicks > 0 ? ((totalConversions / totalClicks) * 100).toFixed(2) : 0
+                },
+                recentCampaigns: campaigns.items
+                    .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))
+                    .slice(0, 5),
+                topPerformingAds: await getTopPerformingAds(advertiserId, 5)
+            }
+        };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
+}
+
+async function getTopPerformingAds(advertiserId, limit) {
+    const ads = await wixData.query('Advertisements')
+        .eq('advertiserId', advertiserId)
+        .descending('metrics.clicks')
+        .limit(limit)
+        .find({ suppressAuth: true });
+    return ads.items;
+}
+
+// ==================== BILLING ====================
+
+/**
+ * Generate invoice for advertiser
+ */
+export async function generateAdInvoice(advertiserId, period, adminUserId) {
+    try {
+        const hasPermission = await hasSpecializedPermission(adminUserId, 'ads_billing');
+        if (!hasPermission) {
+            return { success: false, error: 'Not authorized' };
+        }
+        
+        const campaigns = await wixData.query('AdCampaigns')
+            .eq('advertiserId', advertiserId)
+            .find({ suppressAuth: true });
+        
+        const lineItems = campaigns.items.map(c => ({
+            campaignId: c._id,
+            campaignName: c.name,
+            impressions: c.metrics?.impressions || 0,
+            clicks: c.metrics?.clicks || 0,
+            conversions: c.metrics?.conversions || 0,
+            amount: c.metrics?.spend || 0
+        }));
+        
+        const totalAmount = lineItems.reduce((sum, item) => sum + item.amount, 0);
+        
+        const invoice = await wixData.insert('AdInvoices', {
+            advertiserId,
+            period,
+            lineItems,
+            subtotal: totalAmount,
+            tax: totalAmount * 0.08, // 8% tax
+            total: totalAmount * 1.08,
+            status: 'pending',
+            dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
+            createdAt: new Date(),
+            createdBy: adminUserId
+        }, { suppressAuth: true });
+        
+        return { success: true, invoiceId: invoice._id, invoice };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
+}
+
+// ==================== ADMIN FUNCTIONS ====================
+
+/**
+ * Get all pending ads for review (admin)
+ */
+export async function getPendingAdsForReview(adminUserId) {
+    try {
+        const hasPermission = await hasSpecializedPermission(adminUserId, 'ads_approve');
+        if (!hasPermission) {
+            return { success: false, error: 'Not authorized' };
+        }
+        
+        const pendingAds = await wixData.query('Advertisements')
+            .eq('status', AD_STATUS.PENDING_REVIEW)
+            .ascending('createdAt')
+            .find({ suppressAuth: true });
+        
+        return { success: true, ads: pendingAds.items };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
+}
+
+/**
+ * Get platform ad revenue summary (admin)
+ */
+export async function getAdRevenueSummary(dateRange, adminUserId) {
+    try {
+        const hasPermission = await hasSpecializedPermission(adminUserId, 'ads_analytics');
+        if (!hasPermission) {
+            return { success: false, error: 'Not authorized' };
+        }
+        
+        const campaigns = await wixData.query('AdCampaigns')
+            .ge('createdAt', dateRange.start)
+            .le('createdAt', dateRange.end)
+            .find({ suppressAuth: true });
+        
+        const totalRevenue = campaigns.items.reduce((sum, c) => sum + (c.metrics?.spend || 0), 0);
+        const totalImpressions = campaigns.items.reduce((sum, c) => sum + (c.metrics?.impressions || 0), 0);
+        const totalClicks = campaigns.items.reduce((sum, c) => sum + (c.metrics?.clicks || 0), 0);
+        
+        // Revenue by placement
+        const ads = await wixData.query('Advertisements')
+            .ge('createdAt', dateRange.start)
+            .le('createdAt', dateRange.end)
+            .find({ suppressAuth: true });
+        
+        const byPlacement = {};
+        ads.items.forEach(ad => {
+            const placement = ad.placement || 'other';
+            if (!byPlacement[placement]) {
+                byPlacement[placement] = { count: 0, impressions: 0, clicks: 0, revenue: 0 };
+            }
+            byPlacement[placement].count++;
+            byPlacement[placement].impressions += ad.metrics?.impressions || 0;
+            byPlacement[placement].clicks += ad.metrics?.clicks || 0;
+            byPlacement[placement].revenue += ad.metrics?.spend || 0;
+        });
+        
+        return {
+            success: true,
+            summary: {
+                totalRevenue,
+                totalImpressions,
+                totalClicks,
+                totalCampaigns: campaigns.items.length,
+                activeCampaigns: campaigns.items.filter(c => c.status === AD_STATUS.ACTIVE).length,
+                avgCTR: totalImpressions > 0 ? ((totalClicks / totalImpressions) * 100).toFixed(2) : 0,
+                revenuePerImpression: totalImpressions > 0 ? (totalRevenue / totalImpressions).toFixed(4) : 0,
+                byPlacement
+            }
+        };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
+}
+
+// Helper function
+async function notifyAdReviewResult(ad, status, notes) {
+    // Implementation for notifying advertiser of review result
+}
+
+/**
+ * Get available ad placements with pricing
+ */
+export async function getAdPlacements() {
+    return {
+        success: true,
+        placements: [
+            {
+                id: AD_PLACEMENTS.HOME_HERO,
+                name: 'Home Page Hero Banner',
+                description: 'Premium placement at the top of the home page',
+                dimensions: { width: 1200, height: 400 },
+                pricing: { cpm: 15.00, flatRate: 500 },
+                availability: true
+            },
+            {
+                id: AD_PLACEMENTS.HOME_SIDEBAR,
+                name: 'Home Page Sidebar',
+                description: 'Sidebar ad on the home page',
+                dimensions: { width: 300, height: 250 },
+                pricing: { cpm: 8.00, flatRate: 200 },
+                availability: true
+            },
+            {
+                id: AD_PLACEMENTS.EVENT_PAGE,
+                name: 'Event Pages',
+                description: 'Ad displayed on event pages',
+                dimensions: { width: 728, height: 90 },
+                pricing: { cpm: 10.00, flatRate: 300 },
+                availability: true
+            },
+            {
+                id: AD_PLACEMENTS.EMAIL_NEWSLETTER,
+                name: 'Email Newsletter',
+                description: 'Sponsored section in monthly newsletter',
+                dimensions: { width: 600, height: 200 },
+                pricing: { flatRate: 250 },
+                availability: true
+            },
+            {
+                id: AD_PLACEMENTS.FACEBOOK,
+                name: 'Facebook Promotion',
+                description: 'Promoted post on BANF Facebook page',
+                dimensions: { width: 1200, height: 628 },
+                pricing: { cpc: 0.50, flatRate: 150 },
+                availability: true
+            },
+            {
+                id: AD_PLACEMENTS.INSTAGRAM,
+                name: 'Instagram Promotion',
+                description: 'Promoted post on BANF Instagram',
+                dimensions: { width: 1080, height: 1080 },
+                pricing: { cpc: 0.75, flatRate: 175 },
+                availability: true
+            }
+        ]
+    };
+}

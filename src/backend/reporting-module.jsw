@@ -1,0 +1,702 @@
+/**
+ * BANF Reporting Module
+ * Comprehensive report generation for all modules
+ * 
+ * File: backend/reporting-module.jsw
+ * Deploy to: Wix Velo Backend
+ */
+
+import wixData from 'wix-data';
+import { hasSpecializedPermission } from 'backend/specialized-admin-roles.jsw';
+
+// Report Types
+export const REPORT_TYPES = {
+    // Financial Reports
+    FINANCIAL_SUMMARY: 'financial_summary',
+    INCOME_STATEMENT: 'income_statement',
+    EXPENSE_REPORT: 'expense_report',
+    BUDGET_VS_ACTUAL: 'budget_vs_actual',
+    PAYMENT_RECONCILIATION: 'payment_reconciliation',
+    TAX_SUMMARY: 'tax_summary',
+    
+    // Membership Reports
+    MEMBERSHIP_GROWTH: 'membership_growth',
+    MEMBERSHIP_RETENTION: 'membership_retention',
+    MEMBERSHIP_DEMOGRAPHICS: 'membership_demographics',
+    RENEWAL_STATUS: 'renewal_status',
+    
+    // Event Reports
+    EVENT_ATTENDANCE: 'event_attendance',
+    EVENT_REVENUE: 'event_revenue',
+    EVENT_COMPARISON: 'event_comparison',
+    REGISTRATION_TRENDS: 'registration_trends',
+    
+    // Engagement Reports
+    VOLUNTEER_HOURS: 'volunteer_hours',
+    COMMUNITY_ENGAGEMENT: 'community_engagement',
+    SURVEY_RESULTS: 'survey_results',
+    COMPLAINT_ANALYSIS: 'complaint_analysis',
+    
+    // Content Reports
+    MAGAZINE_ANALYTICS: 'magazine_analytics',
+    RADIO_LISTENERSHIP: 'radio_listenership',
+    GUIDE_USAGE: 'guide_usage',
+    
+    // Sponsor & Vendor Reports
+    SPONSOR_ROI: 'sponsor_roi',
+    VENDOR_PERFORMANCE: 'vendor_performance',
+    AD_PERFORMANCE: 'ad_performance'
+};
+
+// Time Periods
+export const TIME_PERIODS = {
+    DAILY: 'daily',
+    WEEKLY: 'weekly',
+    MONTHLY: 'monthly',
+    QUARTERLY: 'quarterly',
+    YEARLY: 'yearly',
+    CUSTOM: 'custom'
+};
+
+/**
+ * Generate a report
+ * @param {string} reportType - Type of report from REPORT_TYPES
+ * @param {object} options - Report options
+ * @param {string} userId - User generating the report
+ */
+export async function generateReport(reportType, options = {}, userId) {
+    try {
+        // Check permission
+        const hasPermission = await hasSpecializedPermission(userId, 'reports_generate');
+        if (!hasPermission) {
+            return { success: false, error: 'Not authorized to generate reports' };
+        }
+        
+        const { 
+            timePeriod = TIME_PERIODS.MONTHLY,
+            startDate,
+            endDate,
+            eventId,
+            filters = {}
+        } = options;
+        
+        // Calculate date range
+        const dateRange = calculateDateRange(timePeriod, startDate, endDate);
+        
+        let reportData;
+        
+        switch (reportType) {
+            case REPORT_TYPES.FINANCIAL_SUMMARY:
+                reportData = await generateFinancialSummary(dateRange, filters);
+                break;
+            case REPORT_TYPES.INCOME_STATEMENT:
+                reportData = await generateIncomeStatement(dateRange, filters);
+                break;
+            case REPORT_TYPES.EXPENSE_REPORT:
+                reportData = await generateExpenseReport(dateRange, filters);
+                break;
+            case REPORT_TYPES.MEMBERSHIP_GROWTH:
+                reportData = await generateMembershipGrowth(dateRange, filters);
+                break;
+            case REPORT_TYPES.EVENT_ATTENDANCE:
+                reportData = await generateEventAttendance(dateRange, eventId);
+                break;
+            case REPORT_TYPES.EVENT_REVENUE:
+                reportData = await generateEventRevenue(dateRange, eventId);
+                break;
+            case REPORT_TYPES.VOLUNTEER_HOURS:
+                reportData = await generateVolunteerHours(dateRange, filters);
+                break;
+            case REPORT_TYPES.SPONSOR_ROI:
+                reportData = await generateSponsorROI(dateRange, filters);
+                break;
+            case REPORT_TYPES.AD_PERFORMANCE:
+                reportData = await generateAdPerformance(dateRange, filters);
+                break;
+            default:
+                return { success: false, error: 'Invalid report type' };
+        }
+        
+        // Save report to history
+        const report = await wixData.insert('ReportHistory', {
+            reportType,
+            timePeriod,
+            dateRange: {
+                start: dateRange.start,
+                end: dateRange.end
+            },
+            filters,
+            generatedBy: userId,
+            generatedAt: new Date(),
+            data: reportData,
+            exportFormats: ['pdf', 'excel', 'csv']
+        }, { suppressAuth: true });
+        
+        return {
+            success: true,
+            reportId: report._id,
+            reportType,
+            dateRange,
+            data: reportData,
+            generatedAt: new Date()
+        };
+    } catch (error) {
+        console.error('Report generation failed:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+/**
+ * Calculate date range based on time period
+ */
+function calculateDateRange(timePeriod, startDate, endDate) {
+    const now = new Date();
+    let start, end;
+    
+    switch (timePeriod) {
+        case TIME_PERIODS.DAILY:
+            start = new Date(now.setHours(0, 0, 0, 0));
+            end = new Date(now.setHours(23, 59, 59, 999));
+            break;
+        case TIME_PERIODS.WEEKLY:
+            const dayOfWeek = now.getDay();
+            start = new Date(now.setDate(now.getDate() - dayOfWeek));
+            start.setHours(0, 0, 0, 0);
+            end = new Date(start);
+            end.setDate(end.getDate() + 6);
+            end.setHours(23, 59, 59, 999);
+            break;
+        case TIME_PERIODS.MONTHLY:
+            start = new Date(now.getFullYear(), now.getMonth(), 1);
+            end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+            break;
+        case TIME_PERIODS.QUARTERLY:
+            const quarter = Math.floor(now.getMonth() / 3);
+            start = new Date(now.getFullYear(), quarter * 3, 1);
+            end = new Date(now.getFullYear(), quarter * 3 + 3, 0, 23, 59, 59, 999);
+            break;
+        case TIME_PERIODS.YEARLY:
+            start = new Date(now.getFullYear(), 0, 1);
+            end = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999);
+            break;
+        case TIME_PERIODS.CUSTOM:
+            start = new Date(startDate);
+            end = new Date(endDate);
+            break;
+        default:
+            start = new Date(now.getFullYear(), now.getMonth(), 1);
+            end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    }
+    
+    return { start, end };
+}
+
+/**
+ * Generate Financial Summary Report
+ */
+async function generateFinancialSummary(dateRange, filters) {
+    const transactions = await wixData.query('Transactions')
+        .ge('transactionDate', dateRange.start)
+        .le('transactionDate', dateRange.end)
+        .find({ suppressAuth: true });
+    
+    const income = transactions.items
+        .filter(t => t.type === 'income')
+        .reduce((sum, t) => sum + t.amount, 0);
+    
+    const expenses = transactions.items
+        .filter(t => t.type === 'expense')
+        .reduce((sum, t) => sum + t.amount, 0);
+    
+    // Group by category
+    const incomeByCategory = {};
+    const expenseByCategory = {};
+    
+    transactions.items.forEach(t => {
+        const category = t.category || 'Uncategorized';
+        if (t.type === 'income') {
+            incomeByCategory[category] = (incomeByCategory[category] || 0) + t.amount;
+        } else {
+            expenseByCategory[category] = (expenseByCategory[category] || 0) + t.amount;
+        }
+    });
+    
+    return {
+        summary: {
+            totalIncome: income,
+            totalExpenses: expenses,
+            netIncome: income - expenses,
+            transactionCount: transactions.items.length
+        },
+        incomeByCategory,
+        expenseByCategory,
+        monthlyTrend: await getMonthlyTrend(dateRange),
+        topExpenseCategories: Object.entries(expenseByCategory)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 5),
+        topIncomeCategories: Object.entries(incomeByCategory)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 5)
+    };
+}
+
+/**
+ * Generate Income Statement
+ */
+async function generateIncomeStatement(dateRange, filters) {
+    const transactions = await wixData.query('Transactions')
+        .ge('transactionDate', dateRange.start)
+        .le('transactionDate', dateRange.end)
+        .eq('type', 'income')
+        .find({ suppressAuth: true });
+    
+    // Group by source
+    const bySource = {
+        membership: 0,
+        events: 0,
+        sponsorship: 0,
+        vendors: 0,
+        donations: 0,
+        advertising: 0,
+        other: 0
+    };
+    
+    transactions.items.forEach(t => {
+        const source = t.source || 'other';
+        bySource[source] = (bySource[source] || 0) + t.amount;
+    });
+    
+    return {
+        totalIncome: Object.values(bySource).reduce((a, b) => a + b, 0),
+        bySource,
+        transactionDetails: transactions.items.map(t => ({
+            date: t.transactionDate,
+            description: t.description,
+            amount: t.amount,
+            source: t.source,
+            reference: t.referenceNumber
+        }))
+    };
+}
+
+/**
+ * Generate Expense Report
+ */
+async function generateExpenseReport(dateRange, filters) {
+    const transactions = await wixData.query('Transactions')
+        .ge('transactionDate', dateRange.start)
+        .le('transactionDate', dateRange.end)
+        .eq('type', 'expense')
+        .find({ suppressAuth: true });
+    
+    // Group by category
+    const byCategory = {};
+    const byVendor = {};
+    const byEvent = {};
+    
+    transactions.items.forEach(t => {
+        const category = t.category || 'Uncategorized';
+        const vendor = t.vendor || 'Unknown';
+        const event = t.eventName || 'General';
+        
+        byCategory[category] = (byCategory[category] || 0) + t.amount;
+        byVendor[vendor] = (byVendor[vendor] || 0) + t.amount;
+        byEvent[event] = (byEvent[event] || 0) + t.amount;
+    });
+    
+    return {
+        totalExpenses: transactions.items.reduce((sum, t) => sum + t.amount, 0),
+        byCategory,
+        byVendor,
+        byEvent,
+        pendingReimbursements: transactions.items
+            .filter(t => t.status === 'pending_reimbursement')
+            .length,
+        largestExpenses: transactions.items
+            .sort((a, b) => b.amount - a.amount)
+            .slice(0, 10)
+    };
+}
+
+/**
+ * Generate Membership Growth Report
+ */
+async function generateMembershipGrowth(dateRange, filters) {
+    const members = await wixData.query('Members')
+        .find({ suppressAuth: true });
+    
+    const newMembers = members.items.filter(m => 
+        new Date(m.createdAt) >= dateRange.start && 
+        new Date(m.createdAt) <= dateRange.end
+    );
+    
+    const renewals = members.items.filter(m => 
+        m.renewedAt && 
+        new Date(m.renewedAt) >= dateRange.start && 
+        new Date(m.renewedAt) <= dateRange.end
+    );
+    
+    // Group by membership type
+    const byType = {};
+    members.items.forEach(m => {
+        const type = m.membershipType || 'Standard';
+        byType[type] = (byType[type] || 0) + 1;
+    });
+    
+    // Monthly growth
+    const monthlyGrowth = {};
+    newMembers.forEach(m => {
+        const month = new Date(m.createdAt).toLocaleString('default', { month: 'short', year: 'numeric' });
+        monthlyGrowth[month] = (monthlyGrowth[month] || 0) + 1;
+    });
+    
+    return {
+        totalMembers: members.items.length,
+        activeMembers: members.items.filter(m => m.status === 'active').length,
+        newMembersThisPeriod: newMembers.length,
+        renewalsThisPeriod: renewals.length,
+        byMembershipType: byType,
+        monthlyGrowth,
+        retentionRate: calculateRetentionRate(members.items, dateRange),
+        familyMembers: members.items.filter(m => m.membershipType?.includes('Family')).length
+    };
+}
+
+/**
+ * Generate Event Attendance Report
+ */
+async function generateEventAttendance(dateRange, eventId) {
+    let query = wixData.query('EventRegistrations')
+        .ge('createdAt', dateRange.start)
+        .le('createdAt', dateRange.end);
+    
+    if (eventId) {
+        query = query.eq('eventId', eventId);
+    }
+    
+    const registrations = await query.find({ suppressAuth: true });
+    
+    // Get events
+    const eventIds = [...new Set(registrations.items.map(r => r.eventId))];
+    const events = await wixData.query('Events')
+        .hasSome('_id', eventIds)
+        .find({ suppressAuth: true });
+    
+    const eventMap = {};
+    events.items.forEach(e => {
+        eventMap[e._id] = e.title;
+    });
+    
+    // Calculate attendance by event
+    const attendanceByEvent = {};
+    registrations.items.forEach(r => {
+        const eventName = eventMap[r.eventId] || 'Unknown Event';
+        if (!attendanceByEvent[eventName]) {
+            attendanceByEvent[eventName] = {
+                registered: 0,
+                attended: 0,
+                noShow: 0,
+                familyMembers: 0
+            };
+        }
+        attendanceByEvent[eventName].registered++;
+        if (r.checkedIn) attendanceByEvent[eventName].attended++;
+        else attendanceByEvent[eventName].noShow++;
+        attendanceByEvent[eventName].familyMembers += (r.familyCount || 0);
+    });
+    
+    return {
+        totalRegistrations: registrations.items.length,
+        totalAttended: registrations.items.filter(r => r.checkedIn).length,
+        attendanceRate: registrations.items.length > 0 
+            ? (registrations.items.filter(r => r.checkedIn).length / registrations.items.length * 100).toFixed(1) 
+            : 0,
+        byEvent: attendanceByEvent,
+        peakEvents: Object.entries(attendanceByEvent)
+            .sort((a, b) => b[1].attended - a[1].attended)
+            .slice(0, 5)
+    };
+}
+
+/**
+ * Generate Event Revenue Report
+ */
+async function generateEventRevenue(dateRange, eventId) {
+    let query = wixData.query('Transactions')
+        .ge('transactionDate', dateRange.start)
+        .le('transactionDate', dateRange.end)
+        .eq('source', 'events');
+    
+    if (eventId) {
+        query = query.eq('eventId', eventId);
+    }
+    
+    const transactions = await query.find({ suppressAuth: true });
+    
+    // Group by event
+    const revenueByEvent = {};
+    transactions.items.forEach(t => {
+        const eventName = t.eventName || 'Unknown Event';
+        if (!revenueByEvent[eventName]) {
+            revenueByEvent[eventName] = {
+                income: 0,
+                expenses: 0,
+                registrations: 0
+            };
+        }
+        if (t.type === 'income') {
+            revenueByEvent[eventName].income += t.amount;
+            revenueByEvent[eventName].registrations++;
+        } else {
+            revenueByEvent[eventName].expenses += t.amount;
+        }
+    });
+    
+    // Calculate net for each event
+    Object.keys(revenueByEvent).forEach(event => {
+        revenueByEvent[event].net = revenueByEvent[event].income - revenueByEvent[event].expenses;
+        revenueByEvent[event].roi = revenueByEvent[event].expenses > 0 
+            ? ((revenueByEvent[event].net / revenueByEvent[event].expenses) * 100).toFixed(1)
+            : 100;
+    });
+    
+    return {
+        totalRevenue: Object.values(revenueByEvent).reduce((sum, e) => sum + e.income, 0),
+        totalExpenses: Object.values(revenueByEvent).reduce((sum, e) => sum + e.expenses, 0),
+        netIncome: Object.values(revenueByEvent).reduce((sum, e) => sum + e.net, 0),
+        byEvent: revenueByEvent,
+        mostProfitable: Object.entries(revenueByEvent)
+            .sort((a, b) => b[1].net - a[1].net)
+            .slice(0, 5)
+    };
+}
+
+/**
+ * Generate Volunteer Hours Report
+ */
+async function generateVolunteerHours(dateRange, filters) {
+    const hours = await wixData.query('VolunteerHours')
+        .ge('date', dateRange.start)
+        .le('date', dateRange.end)
+        .find({ suppressAuth: true });
+    
+    // Group by volunteer
+    const byVolunteer = {};
+    const byTask = {};
+    const byEvent = {};
+    
+    hours.items.forEach(h => {
+        const volunteer = h.volunteerName || 'Unknown';
+        const task = h.taskType || 'General';
+        const event = h.eventName || 'General';
+        
+        byVolunteer[volunteer] = (byVolunteer[volunteer] || 0) + h.hours;
+        byTask[task] = (byTask[task] || 0) + h.hours;
+        byEvent[event] = (byEvent[event] || 0) + h.hours;
+    });
+    
+    return {
+        totalHours: hours.items.reduce((sum, h) => sum + h.hours, 0),
+        totalVolunteers: Object.keys(byVolunteer).length,
+        averageHoursPerVolunteer: Object.keys(byVolunteer).length > 0 
+            ? (hours.items.reduce((sum, h) => sum + h.hours, 0) / Object.keys(byVolunteer).length).toFixed(1)
+            : 0,
+        byVolunteer,
+        byTask,
+        byEvent,
+        topVolunteers: Object.entries(byVolunteer)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 10)
+    };
+}
+
+/**
+ * Generate Sponsor ROI Report
+ */
+async function generateSponsorROI(dateRange, filters) {
+    const sponsors = await wixData.query('Sponsors')
+        .ge('sponsorshipDate', dateRange.start)
+        .le('sponsorshipDate', dateRange.end)
+        .find({ suppressAuth: true });
+    
+    // Group by tier
+    const byTier = {
+        platinum: { count: 0, revenue: 0 },
+        gold: { count: 0, revenue: 0 },
+        silver: { count: 0, revenue: 0 },
+        bronze: { count: 0, revenue: 0 },
+        supporter: { count: 0, revenue: 0 }
+    };
+    
+    sponsors.items.forEach(s => {
+        const tier = s.tier?.toLowerCase() || 'supporter';
+        if (byTier[tier]) {
+            byTier[tier].count++;
+            byTier[tier].revenue += s.amount || 0;
+        }
+    });
+    
+    return {
+        totalSponsors: sponsors.items.length,
+        totalRevenue: sponsors.items.reduce((sum, s) => sum + (s.amount || 0), 0),
+        byTier,
+        renewalRate: calculateSponsorRenewalRate(sponsors.items),
+        benefitsDelivered: countBenefitsDelivered(sponsors.items)
+    };
+}
+
+/**
+ * Generate Ad Performance Report
+ */
+async function generateAdPerformance(dateRange, filters) {
+    const ads = await wixData.query('Advertisements')
+        .ge('startDate', dateRange.start)
+        .le('endDate', dateRange.end)
+        .find({ suppressAuth: true });
+    
+    const metrics = await wixData.query('AdMetrics')
+        .ge('date', dateRange.start)
+        .le('date', dateRange.end)
+        .find({ suppressAuth: true });
+    
+    // Calculate totals
+    const totalImpressions = metrics.items.reduce((sum, m) => sum + (m.impressions || 0), 0);
+    const totalClicks = metrics.items.reduce((sum, m) => sum + (m.clicks || 0), 0);
+    const totalRevenue = ads.items.reduce((sum, a) => sum + (a.revenue || 0), 0);
+    
+    return {
+        totalAds: ads.items.length,
+        activeAds: ads.items.filter(a => a.status === 'active').length,
+        totalImpressions,
+        totalClicks,
+        ctr: totalImpressions > 0 ? ((totalClicks / totalImpressions) * 100).toFixed(2) : 0,
+        totalRevenue,
+        revenuePerAd: ads.items.length > 0 ? (totalRevenue / ads.items.length).toFixed(2) : 0,
+        byPlatform: groupAdsByPlatform(ads.items, metrics.items),
+        topPerformingAds: metrics.items
+            .sort((a, b) => b.clicks - a.clicks)
+            .slice(0, 10)
+    };
+}
+
+// Helper functions
+function calculateRetentionRate(members, dateRange) {
+    const renewedCount = members.filter(m => 
+        m.renewedAt && new Date(m.renewedAt) >= dateRange.start
+    ).length;
+    const eligibleCount = members.filter(m => 
+        m.membershipExpiry && new Date(m.membershipExpiry) >= dateRange.start
+    ).length;
+    return eligibleCount > 0 ? ((renewedCount / eligibleCount) * 100).toFixed(1) : 0;
+}
+
+async function getMonthlyTrend(dateRange) {
+    // Implementation for monthly trend calculation
+    return [];
+}
+
+function calculateSponsorRenewalRate(sponsors) {
+    const renewed = sponsors.filter(s => s.isRenewal).length;
+    return sponsors.length > 0 ? ((renewed / sponsors.length) * 100).toFixed(1) : 0;
+}
+
+function countBenefitsDelivered(sponsors) {
+    return sponsors.reduce((count, s) => count + (s.benefitsDelivered || []).length, 0);
+}
+
+function groupAdsByPlatform(ads, metrics) {
+    const platforms = {};
+    ads.forEach(a => {
+        const platform = a.platform || 'website';
+        if (!platforms[platform]) {
+            platforms[platform] = { count: 0, impressions: 0, clicks: 0, revenue: 0 };
+        }
+        platforms[platform].count++;
+        platforms[platform].revenue += a.revenue || 0;
+    });
+    return platforms;
+}
+
+/**
+ * Schedule automated report
+ */
+export async function scheduleReport(reportConfig, userId) {
+    try {
+        const scheduled = await wixData.insert('ScheduledReports', {
+            ...reportConfig,
+            createdBy: userId,
+            createdAt: new Date(),
+            isActive: true,
+            lastRun: null,
+            nextRun: calculateNextRun(reportConfig.frequency)
+        }, { suppressAuth: true });
+        
+        return { success: true, scheduleId: scheduled._id };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
+}
+
+function calculateNextRun(frequency) {
+    const now = new Date();
+    switch (frequency) {
+        case 'daily': return new Date(now.setDate(now.getDate() + 1));
+        case 'weekly': return new Date(now.setDate(now.getDate() + 7));
+        case 'monthly': return new Date(now.setMonth(now.getMonth() + 1));
+        case 'quarterly': return new Date(now.setMonth(now.getMonth() + 3));
+        default: return new Date(now.setMonth(now.getMonth() + 1));
+    }
+}
+
+/**
+ * Export report to different formats
+ */
+export async function exportReport(reportId, format, userId) {
+    try {
+        const report = await wixData.get('ReportHistory', reportId, { suppressAuth: true });
+        
+        if (!report) {
+            return { success: false, error: 'Report not found' };
+        }
+        
+        // Generate export based on format
+        let exportData;
+        switch (format) {
+            case 'csv':
+                exportData = convertToCSV(report.data);
+                break;
+            case 'excel':
+                exportData = convertToExcel(report.data);
+                break;
+            case 'pdf':
+                exportData = convertToPDF(report.data);
+                break;
+            default:
+                exportData = JSON.stringify(report.data, null, 2);
+        }
+        
+        return {
+            success: true,
+            format,
+            data: exportData,
+            filename: `${report.reportType}_${new Date().toISOString().split('T')[0]}.${format}`
+        };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
+}
+
+function convertToCSV(data) {
+    // CSV conversion implementation
+    return JSON.stringify(data);
+}
+
+function convertToExcel(data) {
+    // Excel conversion implementation
+    return JSON.stringify(data);
+}
+
+function convertToPDF(data) {
+    // PDF conversion implementation
+    return JSON.stringify(data);
+}

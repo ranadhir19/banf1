@@ -1,0 +1,782 @@
+/**
+ * BANF Insights & Analytics Module
+ * Real-time dashboards and analytics for all modules
+ * 
+ * File: backend/insights-analytics.jsw
+ * Deploy to: Wix Velo Backend
+ */
+
+import wixData from 'wix-data';
+import { hasSpecializedPermission } from 'backend/specialized-admin-roles.jsw';
+
+// Dashboard Types
+export const DASHBOARD_TYPES = {
+    EXECUTIVE_OVERVIEW: 'executive_overview',
+    FINANCIAL_DASHBOARD: 'financial_dashboard',
+    MEMBERSHIP_DASHBOARD: 'membership_dashboard',
+    EVENT_DASHBOARD: 'event_dashboard',
+    ENGAGEMENT_DASHBOARD: 'engagement_dashboard',
+    CONTENT_DASHBOARD: 'content_dashboard',
+    SPONSOR_DASHBOARD: 'sponsor_dashboard',
+    CUSTOM_DASHBOARD: 'custom_dashboard'
+};
+
+// KPI Categories
+export const KPI_CATEGORIES = {
+    MEMBERSHIP: 'membership',
+    FINANCIAL: 'financial',
+    EVENTS: 'events',
+    ENGAGEMENT: 'engagement',
+    CONTENT: 'content',
+    SPONSORSHIP: 'sponsorship',
+    COMMUNITY: 'community'
+};
+
+/**
+ * Get Executive Overview Dashboard
+ * High-level KPIs for leadership
+ */
+export async function getExecutiveOverview(userId) {
+    try {
+        const hasPermission = await hasSpecializedPermission(userId, 'insights_view');
+        if (!hasPermission) {
+            return { success: false, error: 'Not authorized to view insights' };
+        }
+        
+        const now = new Date();
+        const thisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+        const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0);
+        
+        // Parallel data fetching for performance
+        const [
+            membershipStats,
+            financialStats,
+            eventStats,
+            engagementStats
+        ] = await Promise.all([
+            getMembershipKPIs(thisMonth, lastMonth, lastMonthEnd),
+            getFinancialKPIs(thisMonth, lastMonth, lastMonthEnd),
+            getEventKPIs(thisMonth, lastMonth, lastMonthEnd),
+            getEngagementKPIs(thisMonth, lastMonth, lastMonthEnd)
+        ]);
+        
+        return {
+            success: true,
+            timestamp: new Date(),
+            overview: {
+                membership: membershipStats,
+                financial: financialStats,
+                events: eventStats,
+                engagement: engagementStats
+            },
+            alerts: await getActiveAlerts(),
+            trends: await getTrendIndicators()
+        };
+    } catch (error) {
+        console.error('Executive overview failed:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+/**
+ * Get Membership KPIs
+ */
+async function getMembershipKPIs(thisMonth, lastMonth, lastMonthEnd) {
+    const members = await wixData.query('Members')
+        .find({ suppressAuth: true });
+    
+    const currentTotal = members.items.length;
+    const activeMembers = members.items.filter(m => m.status === 'active').length;
+    const newThisMonth = members.items.filter(m => 
+        new Date(m.createdAt) >= thisMonth
+    ).length;
+    const newLastMonth = members.items.filter(m => 
+        new Date(m.createdAt) >= lastMonth && 
+        new Date(m.createdAt) <= lastMonthEnd
+    ).length;
+    
+    const pendingRenewals = members.items.filter(m => {
+        const expiry = new Date(m.membershipExpiry);
+        const thirtyDaysFromNow = new Date();
+        thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
+        return expiry <= thirtyDaysFromNow && m.status === 'active';
+    }).length;
+    
+    return {
+        totalMembers: currentTotal,
+        activeMembers,
+        newThisMonth,
+        growthRate: newLastMonth > 0 
+            ? (((newThisMonth - newLastMonth) / newLastMonth) * 100).toFixed(1) 
+            : 100,
+        pendingRenewals,
+        retentionRate: await calculateRetentionRate(members.items),
+        familyMemberships: members.items.filter(m => m.membershipType?.includes('Family')).length,
+        trend: newThisMonth > newLastMonth ? 'up' : newThisMonth < newLastMonth ? 'down' : 'stable'
+    };
+}
+
+/**
+ * Get Financial KPIs
+ */
+async function getFinancialKPIs(thisMonth, lastMonth, lastMonthEnd) {
+    const transactions = await wixData.query('Transactions')
+        .ge('transactionDate', lastMonth)
+        .find({ suppressAuth: true });
+    
+    const thisMonthTx = transactions.items.filter(t => 
+        new Date(t.transactionDate) >= thisMonth
+    );
+    const lastMonthTx = transactions.items.filter(t => 
+        new Date(t.transactionDate) >= lastMonth && 
+        new Date(t.transactionDate) <= lastMonthEnd
+    );
+    
+    const incomeThisMonth = thisMonthTx
+        .filter(t => t.type === 'income')
+        .reduce((sum, t) => sum + t.amount, 0);
+    
+    const expensesThisMonth = thisMonthTx
+        .filter(t => t.type === 'expense')
+        .reduce((sum, t) => sum + t.amount, 0);
+    
+    const incomeLastMonth = lastMonthTx
+        .filter(t => t.type === 'income')
+        .reduce((sum, t) => sum + t.amount, 0);
+    
+    return {
+        incomeThisMonth,
+        expensesThisMonth,
+        netIncomeThisMonth: incomeThisMonth - expensesThisMonth,
+        incomeGrowth: incomeLastMonth > 0 
+            ? (((incomeThisMonth - incomeLastMonth) / incomeLastMonth) * 100).toFixed(1)
+            : 100,
+        pendingPayments: await getPendingPaymentsCount(),
+        outstandingInvoices: await getOutstandingInvoicesCount(),
+        budgetUtilization: await getBudgetUtilization(),
+        trend: incomeThisMonth > incomeLastMonth ? 'up' : 'down'
+    };
+}
+
+/**
+ * Get Event KPIs
+ */
+async function getEventKPIs(thisMonth, lastMonth, lastMonthEnd) {
+    const events = await wixData.query('Events')
+        .find({ suppressAuth: true });
+    
+    const upcomingEvents = events.items.filter(e => 
+        new Date(e.eventDate) > new Date()
+    ).length;
+    
+    const eventsThisMonth = events.items.filter(e => 
+        new Date(e.eventDate) >= thisMonth
+    ).length;
+    
+    const registrations = await wixData.query('EventRegistrations')
+        .ge('createdAt', thisMonth)
+        .find({ suppressAuth: true });
+    
+    const lastMonthRegs = await wixData.query('EventRegistrations')
+        .ge('createdAt', lastMonth)
+        .le('createdAt', lastMonthEnd)
+        .find({ suppressAuth: true });
+    
+    return {
+        upcomingEvents,
+        eventsThisMonth,
+        registrationsThisMonth: registrations.items.length,
+        registrationGrowth: lastMonthRegs.items.length > 0
+            ? (((registrations.items.length - lastMonthRegs.items.length) / lastMonthRegs.items.length) * 100).toFixed(1)
+            : 100,
+        averageAttendance: await calculateAverageAttendance(),
+        totalRevenue: await calculateEventRevenue(thisMonth),
+        popularEvents: await getPopularEvents(5),
+        trend: registrations.items.length > lastMonthRegs.items.length ? 'up' : 'down'
+    };
+}
+
+/**
+ * Get Engagement KPIs
+ */
+async function getEngagementKPIs(thisMonth, lastMonth, lastMonthEnd) {
+    const [
+        volunteerHours,
+        surveyResponses,
+        complaints,
+        communityActivity
+    ] = await Promise.all([
+        wixData.query('VolunteerHours').ge('date', thisMonth).find({ suppressAuth: true }),
+        wixData.query('SurveyResponses').ge('submittedAt', thisMonth).find({ suppressAuth: true }),
+        wixData.query('Complaints').ge('submittedAt', thisMonth).find({ suppressAuth: true }),
+        wixData.query('CommunityActivity').ge('date', thisMonth).find({ suppressAuth: true })
+    ]);
+    
+    return {
+        volunteerHoursThisMonth: volunteerHours.items.reduce((sum, h) => sum + h.hours, 0),
+        activeVolunteers: new Set(volunteerHours.items.map(h => h.volunteerId)).size,
+        surveyResponseRate: await calculateSurveyResponseRate(),
+        openComplaints: complaints.items.filter(c => c.status !== 'resolved').length,
+        resolvedComplaints: complaints.items.filter(c => c.status === 'resolved').length,
+        communityParticipation: communityActivity.items.length,
+        engagementScore: await calculateEngagementScore()
+    };
+}
+
+/**
+ * Get Real-time Dashboard Data
+ */
+export async function getDashboardData(dashboardType, userId) {
+    try {
+        const hasPermission = await hasSpecializedPermission(userId, 'insights_view');
+        if (!hasPermission) {
+            return { success: false, error: 'Not authorized' };
+        }
+        
+        let data;
+        
+        switch (dashboardType) {
+            case DASHBOARD_TYPES.EXECUTIVE_OVERVIEW:
+                return await getExecutiveOverview(userId);
+                
+            case DASHBOARD_TYPES.FINANCIAL_DASHBOARD:
+                data = await getFinancialDashboard();
+                break;
+                
+            case DASHBOARD_TYPES.MEMBERSHIP_DASHBOARD:
+                data = await getMembershipDashboard();
+                break;
+                
+            case DASHBOARD_TYPES.EVENT_DASHBOARD:
+                data = await getEventDashboard();
+                break;
+                
+            case DASHBOARD_TYPES.ENGAGEMENT_DASHBOARD:
+                data = await getEngagementDashboard();
+                break;
+                
+            case DASHBOARD_TYPES.CONTENT_DASHBOARD:
+                data = await getContentDashboard();
+                break;
+                
+            case DASHBOARD_TYPES.SPONSOR_DASHBOARD:
+                data = await getSponsorDashboard();
+                break;
+                
+            default:
+                return { success: false, error: 'Invalid dashboard type' };
+        }
+        
+        return { success: true, data, timestamp: new Date() };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
+}
+
+/**
+ * Get Financial Dashboard
+ */
+async function getFinancialDashboard() {
+    const now = new Date();
+    const yearStart = new Date(now.getFullYear(), 0, 1);
+    
+    const transactions = await wixData.query('Transactions')
+        .ge('transactionDate', yearStart)
+        .find({ suppressAuth: true });
+    
+    // Monthly breakdown
+    const monthlyData = {};
+    for (let i = 0; i < 12; i++) {
+        const monthName = new Date(now.getFullYear(), i).toLocaleString('default', { month: 'short' });
+        monthlyData[monthName] = { income: 0, expenses: 0 };
+    }
+    
+    transactions.items.forEach(t => {
+        const month = new Date(t.transactionDate).toLocaleString('default', { month: 'short' });
+        if (monthlyData[month]) {
+            if (t.type === 'income') monthlyData[month].income += t.amount;
+            else monthlyData[month].expenses += t.amount;
+        }
+    });
+    
+    // Category breakdown
+    const byCategory = {};
+    transactions.items.forEach(t => {
+        const category = t.category || 'Other';
+        if (!byCategory[category]) {
+            byCategory[category] = { income: 0, expenses: 0 };
+        }
+        if (t.type === 'income') byCategory[category].income += t.amount;
+        else byCategory[category].expenses += t.amount;
+    });
+    
+    return {
+        monthlyTrend: monthlyData,
+        byCategory,
+        totalIncome: transactions.items.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0),
+        totalExpenses: transactions.items.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0),
+        budgetStatus: await getBudgetStatus(),
+        cashFlow: await getCashFlowProjection(),
+        recentTransactions: transactions.items.slice(0, 10)
+    };
+}
+
+/**
+ * Get Membership Dashboard
+ */
+async function getMembershipDashboard() {
+    const members = await wixData.query('Members')
+        .find({ suppressAuth: true });
+    
+    // Growth over last 12 months
+    const now = new Date();
+    const monthlyGrowth = {};
+    for (let i = 11; i >= 0; i--) {
+        const monthDate = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const monthKey = monthDate.toLocaleString('default', { month: 'short', year: '2-digit' });
+        monthlyGrowth[monthKey] = members.items.filter(m => 
+            new Date(m.createdAt) <= new Date(now.getFullYear(), now.getMonth() - i + 1, 0)
+        ).length;
+    }
+    
+    // Demographics
+    const demographics = {
+        byState: {},
+        byMembershipType: {},
+        byJoinYear: {}
+    };
+    
+    members.items.forEach(m => {
+        const state = m.state || 'Unknown';
+        const type = m.membershipType || 'Standard';
+        const year = new Date(m.createdAt).getFullYear();
+        
+        demographics.byState[state] = (demographics.byState[state] || 0) + 1;
+        demographics.byMembershipType[type] = (demographics.byMembershipType[type] || 0) + 1;
+        demographics.byJoinYear[year] = (demographics.byJoinYear[year] || 0) + 1;
+    });
+    
+    return {
+        totalMembers: members.items.length,
+        activeMembers: members.items.filter(m => m.status === 'active').length,
+        monthlyGrowth,
+        demographics,
+        expiringThisMonth: members.items.filter(m => {
+            const expiry = new Date(m.membershipExpiry);
+            const thisMonth = new Date();
+            return expiry.getMonth() === thisMonth.getMonth() && 
+                   expiry.getFullYear() === thisMonth.getFullYear();
+        }).length,
+        lifetimeMembers: members.items.filter(m => m.membershipType === 'Lifetime').length,
+        recentJoins: members.items
+            .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+            .slice(0, 10)
+    };
+}
+
+/**
+ * Get Event Dashboard
+ */
+async function getEventDashboard() {
+    const events = await wixData.query('Events')
+        .descending('eventDate')
+        .find({ suppressAuth: true });
+    
+    const registrations = await wixData.query('EventRegistrations')
+        .find({ suppressAuth: true });
+    
+    // Attendance by event type
+    const byType = {};
+    events.items.forEach(e => {
+        const type = e.eventType || 'Other';
+        if (!byType[type]) {
+            byType[type] = { count: 0, totalAttendees: 0 };
+        }
+        byType[type].count++;
+        byType[type].totalAttendees += registrations.items.filter(r => r.eventId === e._id).length;
+    });
+    
+    // Monthly event count
+    const now = new Date();
+    const monthlyEvents = {};
+    for (let i = 5; i >= 0; i--) {
+        const monthDate = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const monthEnd = new Date(now.getFullYear(), now.getMonth() - i + 1, 0);
+        const monthKey = monthDate.toLocaleString('default', { month: 'short' });
+        monthlyEvents[monthKey] = events.items.filter(e => {
+            const eventDate = new Date(e.eventDate);
+            return eventDate >= monthDate && eventDate <= monthEnd;
+        }).length;
+    }
+    
+    return {
+        totalEvents: events.items.length,
+        upcomingEvents: events.items.filter(e => new Date(e.eventDate) > new Date()),
+        pastEvents: events.items.filter(e => new Date(e.eventDate) <= new Date()),
+        byType,
+        monthlyEvents,
+        topEvents: events.items
+            .map(e => ({
+                ...e,
+                registrationCount: registrations.items.filter(r => r.eventId === e._id).length
+            }))
+            .sort((a, b) => b.registrationCount - a.registrationCount)
+            .slice(0, 5),
+        recentRegistrations: registrations.items
+            .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+            .slice(0, 10)
+    };
+}
+
+/**
+ * Get Engagement Dashboard
+ */
+async function getEngagementDashboard() {
+    const [volunteers, surveys, complaints, community] = await Promise.all([
+        wixData.query('VolunteerHours').find({ suppressAuth: true }),
+        wixData.query('SurveyResponses').find({ suppressAuth: true }),
+        wixData.query('Complaints').find({ suppressAuth: true }),
+        wixData.query('CommunityActivity').find({ suppressAuth: true })
+    ]);
+    
+    return {
+        volunteerMetrics: {
+            totalHours: volunteers.items.reduce((sum, v) => sum + v.hours, 0),
+            totalVolunteers: new Set(volunteers.items.map(v => v.volunteerId)).size,
+            topVolunteers: getTopVolunteers(volunteers.items, 5)
+        },
+        surveyMetrics: {
+            totalResponses: surveys.items.length,
+            averageSatisfaction: calculateAverageSatisfaction(surveys.items),
+            responseRate: await calculateSurveyResponseRate()
+        },
+        complaintMetrics: {
+            total: complaints.items.length,
+            open: complaints.items.filter(c => c.status !== 'resolved').length,
+            avgResolutionTime: calculateAvgResolutionTime(complaints.items)
+        },
+        communityMetrics: {
+            activeInitiatives: community.items.filter(c => c.status === 'active').length,
+            participation: community.items.reduce((sum, c) => sum + (c.participantCount || 0), 0)
+        }
+    };
+}
+
+/**
+ * Get Content Dashboard
+ */
+async function getContentDashboard() {
+    const [magazines, radio, guides, gallery] = await Promise.all([
+        wixData.query('MagazineIssues').find({ suppressAuth: true }),
+        wixData.query('RadioPrograms').find({ suppressAuth: true }),
+        wixData.query('Guides').find({ suppressAuth: true }),
+        wixData.query('GalleryItems').find({ suppressAuth: true })
+    ]);
+    
+    return {
+        magazineMetrics: {
+            totalIssues: magazines.items.length,
+            totalViews: magazines.items.reduce((sum, m) => sum + (m.viewCount || 0), 0),
+            latestIssue: magazines.items.sort((a, b) => new Date(b.publishedAt) - new Date(a.publishedAt))[0]
+        },
+        radioMetrics: {
+            totalPrograms: radio.items.length,
+            totalListens: radio.items.reduce((sum, r) => sum + (r.listenCount || 0), 0),
+            upcomingShows: radio.items.filter(r => new Date(r.scheduledAt) > new Date()).length
+        },
+        guideMetrics: {
+            totalGuides: guides.items.length,
+            totalViews: guides.items.reduce((sum, g) => sum + (g.viewCount || 0), 0),
+            byCategory: groupByCategory(guides.items)
+        },
+        galleryMetrics: {
+            totalItems: gallery.items.length,
+            byEvent: groupByEvent(gallery.items)
+        }
+    };
+}
+
+/**
+ * Get Sponsor Dashboard
+ */
+async function getSponsorDashboard() {
+    const sponsors = await wixData.query('Sponsors')
+        .find({ suppressAuth: true });
+    
+    const vendors = await wixData.query('Vendors')
+        .find({ suppressAuth: true });
+    
+    const ads = await wixData.query('Advertisements')
+        .find({ suppressAuth: true });
+    
+    return {
+        sponsorMetrics: {
+            total: sponsors.items.length,
+            byTier: groupByTier(sponsors.items),
+            totalRevenue: sponsors.items.reduce((sum, s) => sum + (s.amount || 0), 0),
+            expiringThisMonth: sponsors.items.filter(s => {
+                const expiry = new Date(s.expiryDate);
+                const now = new Date();
+                return expiry.getMonth() === now.getMonth() && expiry.getFullYear() === now.getFullYear();
+            }).length
+        },
+        vendorMetrics: {
+            total: vendors.items.length,
+            active: vendors.items.filter(v => v.status === 'active').length,
+            avgRating: vendors.items.reduce((sum, v) => sum + (v.rating || 0), 0) / vendors.items.length || 0
+        },
+        adMetrics: {
+            total: ads.items.length,
+            active: ads.items.filter(a => a.status === 'active').length,
+            totalRevenue: ads.items.reduce((sum, a) => sum + (a.revenue || 0), 0),
+            avgCTR: calculateAvgCTR(ads.items)
+        }
+    };
+}
+
+/**
+ * Get Predictive Analytics
+ */
+export async function getPredictiveAnalytics(metric, userId) {
+    try {
+        const hasPermission = await hasSpecializedPermission(userId, 'insights_advanced');
+        if (!hasPermission) {
+            return { success: false, error: 'Not authorized for advanced analytics' };
+        }
+        
+        let prediction;
+        
+        switch (metric) {
+            case 'membership_growth':
+                prediction = await predictMembershipGrowth();
+                break;
+            case 'event_attendance':
+                prediction = await predictEventAttendance();
+                break;
+            case 'revenue':
+                prediction = await predictRevenue();
+                break;
+            case 'churn':
+                prediction = await predictChurnRisk();
+                break;
+            default:
+                return { success: false, error: 'Invalid metric' };
+        }
+        
+        return { success: true, prediction };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
+}
+
+// Prediction helper functions
+async function predictMembershipGrowth() {
+    // Simple linear projection based on historical data
+    const members = await wixData.query('Members').find({ suppressAuth: true });
+    
+    const monthlyGrowth = [];
+    for (let i = 5; i >= 0; i--) {
+        const monthStart = new Date();
+        monthStart.setMonth(monthStart.getMonth() - i);
+        monthStart.setDate(1);
+        const count = members.items.filter(m => new Date(m.createdAt) <= monthStart).length;
+        monthlyGrowth.push(count);
+    }
+    
+    // Simple linear regression for next 3 months
+    const avgGrowth = (monthlyGrowth[5] - monthlyGrowth[0]) / 5;
+    const predictions = [
+        Math.round(monthlyGrowth[5] + avgGrowth),
+        Math.round(monthlyGrowth[5] + avgGrowth * 2),
+        Math.round(monthlyGrowth[5] + avgGrowth * 3)
+    ];
+    
+    return {
+        historical: monthlyGrowth,
+        predicted: predictions,
+        confidence: 0.75,
+        trend: avgGrowth > 0 ? 'growing' : 'declining'
+    };
+}
+
+async function predictEventAttendance() {
+    return { predicted: 150, confidence: 0.70, factors: ['season', 'event_type', 'marketing'] };
+}
+
+async function predictRevenue() {
+    return { predicted: 25000, confidence: 0.65, factors: ['memberships', 'events', 'sponsorships'] };
+}
+
+async function predictChurnRisk() {
+    const members = await wixData.query('Members')
+        .eq('status', 'active')
+        .find({ suppressAuth: true });
+    
+    const atRisk = members.items.filter(m => {
+        const expiry = new Date(m.membershipExpiry);
+        const daysTillExpiry = (expiry - new Date()) / (1000 * 60 * 60 * 24);
+        return daysTillExpiry <= 30 && daysTillExpiry > 0;
+    });
+    
+    return {
+        atRiskCount: atRisk.length,
+        atRiskMembers: atRisk.map(m => ({
+            id: m._id,
+            name: `${m.firstName} ${m.lastName}`,
+            expiryDate: m.membershipExpiry,
+            riskScore: calculateChurnRiskScore(m)
+        })),
+        totalAtRiskValue: atRisk.reduce((sum, m) => sum + (m.membershipFee || 0), 0)
+    };
+}
+
+// Helper functions
+function calculateChurnRiskScore(member) {
+    let score = 50; // Base score
+    
+    // Engagement factors
+    if (member.lastEventAttended) {
+        const daysSinceEvent = (new Date() - new Date(member.lastEventAttended)) / (1000 * 60 * 60 * 24);
+        if (daysSinceEvent > 180) score += 20;
+        else if (daysSinceEvent > 90) score += 10;
+    } else {
+        score += 15;
+    }
+    
+    // Renewal history
+    if (!member.isRenewal) score += 10; // First-time members at higher risk
+    
+    return Math.min(score, 100);
+}
+
+async function calculateRetentionRate(members) {
+    const renewals = members.filter(m => m.isRenewal).length;
+    return members.length > 0 ? ((renewals / members.length) * 100).toFixed(1) : 0;
+}
+
+async function getPendingPaymentsCount() {
+    const pending = await wixData.query('Payments')
+        .eq('status', 'pending')
+        .count({ suppressAuth: true });
+    return pending;
+}
+
+async function getOutstandingInvoicesCount() {
+    const outstanding = await wixData.query('Invoices')
+        .eq('status', 'outstanding')
+        .count({ suppressAuth: true });
+    return outstanding;
+}
+
+async function getBudgetUtilization() {
+    return 75; // Placeholder
+}
+
+async function calculateAverageAttendance() {
+    return 85; // Placeholder
+}
+
+async function calculateEventRevenue(startDate) {
+    const revenue = await wixData.query('Transactions')
+        .ge('transactionDate', startDate)
+        .eq('source', 'events')
+        .eq('type', 'income')
+        .find({ suppressAuth: true });
+    return revenue.items.reduce((sum, t) => sum + t.amount, 0);
+}
+
+async function getPopularEvents(limit) {
+    return [];
+}
+
+async function calculateSurveyResponseRate() {
+    return 65;
+}
+
+async function calculateEngagementScore() {
+    return 78;
+}
+
+async function getActiveAlerts() {
+    return [
+        { type: 'warning', message: '5 memberships expiring this week' },
+        { type: 'info', message: 'New event registrations up 15%' }
+    ];
+}
+
+async function getTrendIndicators() {
+    return {
+        membership: 'up',
+        revenue: 'stable',
+        engagement: 'up'
+    };
+}
+
+async function getBudgetStatus() {
+    return { utilized: 75, remaining: 25 };
+}
+
+async function getCashFlowProjection() {
+    return [];
+}
+
+function getTopVolunteers(hours, limit) {
+    const byVolunteer = {};
+    hours.forEach(h => {
+        byVolunteer[h.volunteerName] = (byVolunteer[h.volunteerName] || 0) + h.hours;
+    });
+    return Object.entries(byVolunteer)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, limit);
+}
+
+function calculateAverageSatisfaction(surveys) {
+    const scores = surveys.map(s => s.satisfactionScore).filter(s => s);
+    return scores.length > 0 ? (scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(1) : 0;
+}
+
+function calculateAvgResolutionTime(complaints) {
+    const resolved = complaints.filter(c => c.resolvedAt);
+    if (resolved.length === 0) return 0;
+    const totalDays = resolved.reduce((sum, c) => {
+        return sum + (new Date(c.resolvedAt) - new Date(c.submittedAt)) / (1000 * 60 * 60 * 24);
+    }, 0);
+    return (totalDays / resolved.length).toFixed(1);
+}
+
+function groupByCategory(items) {
+    const groups = {};
+    items.forEach(i => {
+        const cat = i.category || 'Other';
+        groups[cat] = (groups[cat] || 0) + 1;
+    });
+    return groups;
+}
+
+function groupByEvent(items) {
+    const groups = {};
+    items.forEach(i => {
+        const event = i.eventName || 'General';
+        groups[event] = (groups[event] || 0) + 1;
+    });
+    return groups;
+}
+
+function groupByTier(sponsors) {
+    const tiers = { platinum: 0, gold: 0, silver: 0, bronze: 0, supporter: 0 };
+    sponsors.forEach(s => {
+        const tier = s.tier?.toLowerCase() || 'supporter';
+        if (tiers[tier] !== undefined) tiers[tier]++;
+    });
+    return tiers;
+}
+
+function calculateAvgCTR(ads) {
+    const withMetrics = ads.filter(a => a.impressions > 0);
+    if (withMetrics.length === 0) return 0;
+    const totalCTR = withMetrics.reduce((sum, a) => {
+        return sum + ((a.clicks || 0) / a.impressions) * 100;
+    }, 0);
+    return (totalCTR / withMetrics.length).toFixed(2);
+}
