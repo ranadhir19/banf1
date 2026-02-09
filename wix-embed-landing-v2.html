@@ -2,7 +2,12 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="format-detection" content="telephone=no">
+    <!-- Allow embedding in Wix iframes -->
+    <meta http-equiv="Content-Security-Policy" content="frame-ancestors 'self' https://*.wix.com https://*.wixsite.com https://editor.wix.com https://manage.wix.com;">
+    <base target="_parent">
     <title>BANF Jacksonville - Bengali Association of North Florida</title>
     <!-- Google Fonts - using preconnect for performance -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -27,6 +32,18 @@
             --gradient-green: linear-gradient(135deg, #006A4E 0%, #00856F 100%);
         }
 
+        /* ========== EMBED-SPECIFIC STYLES ========== */
+        html, body {
+            width: 100%;
+            min-height: 100%;
+            overflow-x: hidden;
+        }
+        
+        /* Fix for Wix iframe embedding */
+        .wix-embed-mode {
+            /* Applied when embedded in Wix */
+        }
+        
         /* ========== BASE STYLES ========== */
         * { margin: 0; padding: 0; box-sizing: border-box; }
         html { scroll-behavior: smooth; }
@@ -34,7 +51,9 @@
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; 
             background: #f8f9fa; 
             color: #495057; 
-            line-height: 1.7; 
+            line-height: 1.7;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
         }
         h1, h2, h3, h4, h5, h6 { 
             font-family: 'Playfair Display', Georgia, serif; 
@@ -3160,6 +3179,80 @@
          */
         function hideStatusMessage() {
             document.getElementById('portalStatusMessage').style.display = 'none';
+        }
+
+        // ========== WIX EMBED INTEGRATION ==========
+        
+        /**
+         * Detect if running in Wix iframe
+         */
+        function isWixEmbed() {
+            try {
+                return window.self !== window.top && 
+                       (document.referrer.includes('wix.com') || 
+                        document.referrer.includes('wixsite.com') ||
+                        window.location.search.includes('wix-embed=true'));
+            } catch (e) {
+                return true; // Blocked by CORS = we're in an iframe
+            }
+        }
+
+        /**
+         * Send height to parent Wix page for auto-resize
+         */
+        function sendHeightToWix() {
+            if (isWixEmbed()) {
+                const height = document.documentElement.scrollHeight;
+                window.parent.postMessage({
+                    type: 'BANF_EMBED_HEIGHT',
+                    height: height
+                }, '*');
+            }
+        }
+
+        /**
+         * Initialize embed mode
+         */
+        function initEmbedMode() {
+            if (isWixEmbed()) {
+                document.body.classList.add('wix-embed-mode');
+                
+                // Send initial height
+                sendHeightToWix();
+                
+                // Send height on resize
+                window.addEventListener('resize', sendHeightToWix);
+                
+                // Send height after images load
+                window.addEventListener('load', () => {
+                    setTimeout(sendHeightToWix, 500);
+                });
+                
+                // Observe DOM changes for dynamic content
+                const observer = new MutationObserver(() => {
+                    setTimeout(sendHeightToWix, 100);
+                });
+                observer.observe(document.body, { childList: true, subtree: true });
+                
+                // Listen for messages from Wix parent
+                window.addEventListener('message', (event) => {
+                    if (event.data && event.data.type === 'WIX_SCROLL_TO') {
+                        const section = document.querySelector(event.data.target);
+                        if (section) {
+                            section.scrollIntoView({ behavior: 'smooth' });
+                        }
+                    }
+                });
+                
+                console.log('[BANF Embed] Running in Wix iframe mode');
+            }
+        }
+
+        // Initialize when DOM is ready
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initEmbedMode);
+        } else {
+            initEmbedMode();
         }
     </script>
 </body>
