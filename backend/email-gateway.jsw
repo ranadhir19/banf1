@@ -1,0 +1,763 @@
+/**
+ * BANF Email Gateway - Wix Velo Backend
+ * ========================================
+ * Replaces gmail_service.py (localhost Flask) with Wix Velo backend.
+ * 
+ * This module provides ALL email/contacts/evite functionality that
+ * the frontend HTML iframe needs — WITHOUT any local machine dependency.
+ * 
+ * Architecture:
+ *   iframe HTML → fetch('/_functions/...') → http-functions.js → this module
+ *   → Wix Data (contacts, messages) + triggeredEmails (sending)
+ * 
+ * Data Collections Required in Wix:
+ *   - ContactGroups     → { _id, groupName, description, createdAt }
+ *   - GroupContacts      → { _id, groupName, name, email, addedAt }
+ *   - SentEmails         → { _id, to, subject, body, sentAt, sentBy, type }
+ *   - Evites             → (already exists from evite-service.jsw)
+ *   - EviteInvitations   → (already exists from evite-service.jsw)
+ *   - InboxMessages      → { _id, from, to, subject, body, receivedAt, read, folder }
+ * 
+ * @module backend/email-gateway.jsw
+ */
+
+import wixData from 'wix-data';
+import { triggeredEmails } from 'wix-crm-backend';
+import { fetch as wixFetch } from 'wix-fetch';
+
+// =====================================================
+// CONFIGURATION
+// =====================================================
+
+const BANF_EMAIL = 'banfjax@gmail.com';
+const BANF_ORG_NAME = 'Bengali Association of North Florida';
+
+// SendGrid configuration (free tier: 100 emails/day)
+// Set these in Wix Secrets Manager (Site Dashboard > Settings > Secrets Manager)
+// Secret name: 'sendgrid_api_key'
+let SENDGRID_API_KEY = null;
+
+async function getSendGridKey() {
+    if (SENDGRID_API_KEY) return SENDGRID_API_KEY;
+    try {
+        const { getSecret } = await import('wix-secrets-backend');
+        SENDGRID_API_KEY = await getSecret('sendgrid_api_key');
+        return SENDGRID_API_KEY;
+    } catch (e) {
+        console.error('SendGrid key not configured:', e.message);
+        return null;
+    }
+}
+
+
+// =====================================================
+// EMAIL SENDING (via SendGrid HTTP API or Wix Triggered Emails)
+// =====================================================
+
+/**
+ * Send an email via SendGrid HTTP API
+ * This replaces gmail_service.py's SMTP sending
+ * 
+ * @param {Object} emailData - { to, subject, body, body_html, cc, bcc, reply_to }
+ * @returns {Object} - { success, message, timestamp }
+ */
+export async function sendEmail(emailData) {
+    const { to, subject, body, body_html, cc, bcc, reply_to } = emailData;
+
+    if (!to || !subject) {
+        return { success: false, error: 'Missing required fields: to, subject' };
+    }
+
+    try {
+        const apiKey = await getSendGridKey();
+
+        if (apiKey) {
+            // --- PRIMARY: Send via SendGrid HTTP API ---
+            return await sendViaSendGrid(emailData, apiKey);
+        } else {
+            // --- FALLBACK: Send via Wix Triggered Email ---
+            return await sendViaTriggeredEmail(emailData);
+        }
+    } catch (error) {
+        console.error('Send email error:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+/**
+ * Send email via SendGrid HTTP API (free tier: 100/day)
+ */
+async function sendViaSendGrid(emailData, apiKey) {
+    const { to, subject, body, body_html, cc, bcc, reply_to } = emailData;
+
+    const personalizations = [{
+        to: to.split(',').map(e => ({ email: e.trim() }))
+    }];
+
+    if (cc) {
+        personalizations[0].cc = cc.split(',').map(e => ({ email: e.trim() }));
+    }
+    if (bcc) {
+        personalizations[0].bcc = bcc.split(',').map(e => ({ email: e.trim() }));
+    }
+
+    const sgPayload = {
+        personalizations,
+        from: { email: BANF_EMAIL, name: BANF_ORG_NAME },
+        reply_to: { email: reply_to || BANF_EMAIL },
+        subject: subject,
+        content: []
+    };
+
+    if (body) {
+        sgPayload.content.push({ type: 'text/plain', value: body });
+    }
+    if (body_html) {
+        sgPayload.content.push({ type: 'text/html', value: body_html });
+    }
+    if (sgPayload.content.length === 0) {
+        sgPayload.content.push({ type: 'text/plain', value: '(No content)' });
+    }
+
+    const response = await wixFetch('https://api.sendgrid.com/v3/mail/send', {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(sgPayload)
+    });
+
+    // SendGrid returns 202 on success
+    if (response.status === 202 || response.status === 200) {
+        // Log sent email
+        await logSentEmail({ to, subject, body: body || body_html, type: 'direct' });
+
+        return {
+            success: true,
+            message: `Email sent to ${to}`,
+            timestamp: new Date().toISOString()
+        };
+    } else {
+        const errorText = await response.text();
+        console.error('SendGrid error:', response.status, errorText);
+        return { success: false, error: `SendGrid error: ${response.status}` };
+    }
+}
+
+/**
+ * Fallback: Send via Wix Triggered Emails
+ * Requires 'general_email' template in Wix Dashboard > Triggered Emails
+ */
+async function sendViaTriggeredEmail(emailData) {
+    const { to, subject, body, body_html } = emailData;
+
+    try {
+        // Use emailContact for non-member emails
+        await triggeredEmails.emailContact('general_email', to, {
+            variables: {
+                subject: subject,
+                body: body || '',
+                bodyHtml: body_html || '',
+                senderName: BANF_ORG_NAME,
+                timestamp: new Date().toLocaleDateString('en-US')
+            }
+        });
+
+        await logSentEmail({ to, subject, body: body || body_html, type: 'triggered' });
+
+        return {
+            success: true,
+            message: `Email sent to ${to} via Wix Triggered Email`,
+            timestamp: new Date().toISOString()
+        };
+    } catch (error) {
+        return { success: false, error: `Triggered email failed: ${error.message}` };
+    }
+}
+
+
+// =====================================================
+// EVITE SENDING (Beautiful HTML Invitations)
+// =====================================================
+
+/**
+ * Send evite/invitation emails
+ * Replaces gmail_service.py /api/gmail/send-evite
+ * 
+ * @param {Object} eviteData - { recipients, event_name, event_date, event_time, venue, message, rsvp_deadline }
+ * @returns {Object} - { success, sent_count, failed_count, failed, timestamp }
+ */
+export async function sendEviteEmails(eviteData) {
+    const { recipients, event_name, event_date, event_time, venue, message, rsvp_deadline } = eviteData;
+
+    if (!recipients || !event_name) {
+        return { success: false, error: 'Missing required fields: recipients, event_name' };
+    }
+
+    let sentCount = 0;
+    const failed = [];
+
+    for (const recipient of recipients) {
+        const rName = recipient.name || 'Member';
+        const rEmail = recipient.email || '';
+        if (!rEmail) continue;
+
+        try {
+            // Build evite HTML
+            const htmlBody = buildEviteHtml({
+                recipientName: rName,
+                eventName: event_name,
+                eventDate: event_date || 'TBD',
+                eventTime: event_time || '',
+                venue: venue || 'TBD',
+                message: (message || '').replace('{memberName}', rName)
+                    .replace('{eventName}', event_name)
+                    .replace('{eventDate}', event_date || '')
+                    .replace('{venue}', venue || ''),
+                collectDietary: eviteData.collect_dietary !== false,
+                collectKids: eviteData.collect_kids !== false
+            });
+
+            const plainBody = `BANF Invitation - ${event_name}\n\nDear ${rName},\n\n${message || 'You are invited!'}\n\n📅 Date: ${event_date}\n⏰ Time: ${event_time}\n📍 Venue: ${venue}\n\nPlease reply with YES / MAYBE / NO\n\nBANF - ${BANF_ORG_NAME}`;
+
+            // Send via SendGrid or Triggered Email
+            const result = await sendEmail({
+                to: rEmail,
+                subject: eviteData.subject || `You're Invited: ${event_name}`,
+                body: plainBody,
+                body_html: htmlBody,
+                reply_to: BANF_EMAIL
+            });
+
+            if (result.success) {
+                sentCount++;
+
+                // Save evite record to Wix Data
+                await wixData.insert('SentEmails', {
+                    to: rEmail,
+                    recipientName: rName,
+                    subject: `Evite: ${event_name}`,
+                    body: message,
+                    sentAt: new Date(),
+                    type: 'evite',
+                    eventName: event_name,
+                    eventDate: event_date,
+                    rsvpStatus: 'pending'
+                }).catch(() => {}); // Don't fail if logging fails
+
+            } else {
+                failed.push({ email: rEmail, error: result.error });
+            }
+
+        } catch (err) {
+            failed.push({ email: rEmail, error: err.message });
+        }
+    }
+
+    return {
+        success: sentCount > 0,
+        sent_count: sentCount,
+        failed_count: failed.length,
+        failed: failed,
+        timestamp: new Date().toISOString()
+    };
+}
+
+/**
+ * Build beautiful HTML for evite email
+ */
+function buildEviteHtml({ recipientName, eventName, eventDate, eventTime, venue, message, collectDietary, collectKids }) {
+    const rsvpYesUrl = `mailto:${BANF_EMAIL}?subject=${encodeURIComponent(`RSVP YES - ${eventName} - ${recipientName}`)}&body=${encodeURIComponent(`I will attend!\n\nName: ${recipientName}\nAdults: \nKids: \nDietary: `)}`;
+    const rsvpMaybeUrl = `mailto:${BANF_EMAIL}?subject=${encodeURIComponent(`RSVP MAYBE - ${eventName} - ${recipientName}`)}&body=${encodeURIComponent(`I might attend.\n\nName: ${recipientName}`)}`;
+    const rsvpNoUrl = `mailto:${BANF_EMAIL}?subject=${encodeURIComponent(`RSVP NO - ${eventName} - ${recipientName}`)}&body=${encodeURIComponent(`Sorry, I cannot attend.\n\nName: ${recipientName}`)}`;
+
+    return `
+    <div style="max-width:600px;margin:0 auto;font-family:Arial,sans-serif;">
+        <div style="background:linear-gradient(135deg,#ff6b35,#f7c948);padding:30px;text-align:center;border-radius:10px 10px 0 0;">
+            <h1 style="color:white;margin:0;">🌺 BANF Invitation</h1>
+            <p style="color:rgba(255,255,255,0.9);margin:5px 0 0;">${BANF_ORG_NAME}</p>
+        </div>
+        <div style="background:#fff;padding:30px;border:1px solid #eee;">
+            <h2 style="color:#333;">${eventName}</h2>
+            <p style="color:#666;">Dear ${recipientName},</p>
+            <p style="color:#444;line-height:1.6;">${message || 'You are cordially invited!'}</p>
+            <div style="background:#f9f9f9;padding:15px;border-radius:8px;margin:20px 0;">
+                <p style="margin:5px 0;"><strong>📅 Date:</strong> ${eventDate}</p>
+                ${eventTime ? `<p style="margin:5px 0;"><strong>🕐 Time:</strong> ${eventTime}</p>` : ''}
+                <p style="margin:5px 0;"><strong>📍 Venue:</strong> ${venue}</p>
+            </div>
+            <div style="text-align:center;margin:25px 0;">
+                <p style="color:#666;margin-bottom:15px;">Please let us know if you can attend:</p>
+                <a href="${rsvpYesUrl}" style="display:inline-block;background:#4CAF50;color:white;padding:12px 30px;text-decoration:none;border-radius:5px;margin:5px;font-weight:bold;">✅ Yes, I'll Attend</a>
+                <a href="${rsvpMaybeUrl}" style="display:inline-block;background:#FF9800;color:white;padding:12px 30px;text-decoration:none;border-radius:5px;margin:5px;font-weight:bold;">🤔 Maybe</a>
+                <a href="${rsvpNoUrl}" style="display:inline-block;background:#f44336;color:white;padding:12px 30px;text-decoration:none;border-radius:5px;margin:5px;font-weight:bold;">❌ Can't Make It</a>
+            </div>
+            ${(collectDietary || collectKids) ? '<p style="color:#888;font-size:14px;">Please include: number of adults, kids, and any dietary requirements in your reply.</p>' : ''}
+        </div>
+        <div style="background:#333;padding:15px;text-align:center;border-radius:0 0 10px 10px;">
+            <p style="color:#aaa;margin:0;font-size:12px;">${BANF_ORG_NAME} • Jacksonville, FL</p>
+            <p style="color:#aaa;margin:5px 0 0;font-size:12px;">Contact: ${BANF_EMAIL}</p>
+        </div>
+    </div>`;
+}
+
+
+// =====================================================
+// CONTACT GROUP MANAGEMENT (replaces gmail_service.py contacts)
+// =====================================================
+
+/**
+ * Get all contact groups
+ * Replaces /api/gmail/contacts
+ */
+export async function getContactGroups() {
+    try {
+        const groups = await wixData.query('ContactGroups')
+            .ascending('groupName')
+            .find();
+
+        const result = {};
+        for (const group of groups.items) {
+            const contacts = await wixData.query('GroupContacts')
+                .eq('groupName', group.groupName)
+                .ascending('name')
+                .find();
+
+            result[group.groupName] = contacts.items.map(c => ({
+                name: c.name,
+                email: c.email
+            }));
+        }
+
+        return { groups: result };
+    } catch (error) {
+        console.error('Get contacts error:', error);
+        return { groups: {} };
+    }
+}
+
+/**
+ * Create a contact group
+ * Replaces POST /api/gmail/contacts/group
+ */
+export async function createContactGroup(groupName, description) {
+    if (!groupName) {
+        return { success: false, error: 'Group name required' };
+    }
+
+    try {
+        // Check if exists
+        const existing = await wixData.query('ContactGroups')
+            .eq('groupName', groupName)
+            .find();
+
+        if (existing.items.length > 0) {
+            return { success: false, error: 'Group already exists' };
+        }
+
+        await wixData.insert('ContactGroups', {
+            groupName: groupName,
+            description: description || '',
+            createdAt: new Date()
+        });
+
+        return { success: true, message: `Group '${groupName}' created` };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
+}
+
+/**
+ * Delete a contact group
+ * Replaces DELETE /api/gmail/contacts/group/:name
+ */
+export async function deleteContactGroup(groupName) {
+    try {
+        // Find and delete group
+        const groups = await wixData.query('ContactGroups')
+            .eq('groupName', groupName)
+            .find();
+
+        if (groups.items.length === 0) {
+            return { success: false, error: 'Group not found' };
+        }
+
+        await wixData.remove('ContactGroups', groups.items[0]._id);
+
+        // Delete all contacts in group
+        const contacts = await wixData.query('GroupContacts')
+            .eq('groupName', groupName)
+            .find();
+
+        for (const contact of contacts.items) {
+            await wixData.remove('GroupContacts', contact._id);
+        }
+
+        return { success: true, message: `Group '${groupName}' deleted` };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
+}
+
+/**
+ * Add contacts to a group
+ * Replaces POST /api/gmail/contacts/group/:name/add
+ */
+export async function addContactsToGroup(groupName, contacts) {
+    try {
+        // Check group exists
+        const groups = await wixData.query('ContactGroups')
+            .eq('groupName', groupName)
+            .find();
+
+        if (groups.items.length === 0) {
+            return { success: false, error: 'Group not found' };
+        }
+
+        // Get existing emails in group
+        const existing = await wixData.query('GroupContacts')
+            .eq('groupName', groupName)
+            .find();
+        const existingEmails = new Set(existing.items.map(c => c.email));
+
+        let added = 0;
+        for (const contact of contacts) {
+            if (contact.email && !existingEmails.has(contact.email)) {
+                await wixData.insert('GroupContacts', {
+                    groupName: groupName,
+                    name: contact.name || contact.email,
+                    email: contact.email,
+                    addedAt: new Date()
+                });
+                added++;
+            }
+        }
+
+        return { success: true, added: added };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
+}
+
+/**
+ * Remove contact from a group
+ * Replaces POST /api/gmail/contacts/group/:name/remove
+ */
+export async function removeContactFromGroup(groupName, emails) {
+    try {
+        const emailList = Array.isArray(emails) ? emails : [emails];
+
+        for (const email of emailList) {
+            const contacts = await wixData.query('GroupContacts')
+                .eq('groupName', groupName)
+                .eq('email', email)
+                .find();
+
+            for (const contact of contacts.items) {
+                await wixData.remove('GroupContacts', contact._id);
+            }
+        }
+
+        return { success: true };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
+}
+
+
+// =====================================================
+// EMAIL STATUS & TRACKING
+// =====================================================
+
+/**
+ * Get email service status
+ * Replaces /api/gmail/status
+ */
+export async function getEmailStatus() {
+    try {
+        const apiKey = await getSendGridKey();
+
+        // Count sent emails today
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        const sentToday = await wixData.query('SentEmails')
+            .ge('sentAt', today)
+            .count();
+
+        return {
+            status: 'connected',
+            connected: true,
+            email: BANF_EMAIL,
+            service: apiKey ? 'SendGrid' : 'Wix Triggered Emails',
+            sentToday: sentToday,
+            dailyLimit: apiKey ? 100 : 'Unlimited (Wix plan limit)',
+            imap: false,  // No IMAP in Wix — inbox via Wix Data
+            smtp: true,   // Sending works via SendGrid/Wix
+            timestamp: new Date().toISOString()
+        };
+    } catch (error) {
+        return {
+            status: 'error',
+            connected: false,
+            email: BANF_EMAIL,
+            error: error.message
+        };
+    }
+}
+
+/**
+ * Get unread message count
+ * Replaces /api/gmail/unread
+ */
+export async function getUnreadCount() {
+    try {
+        const count = await wixData.query('InboxMessages')
+            .eq('read', false)
+            .eq('folder', 'INBOX')
+            .count();
+
+        return { unread_count: count };
+    } catch (error) {
+        return { unread_count: 0 };
+    }
+}
+
+/**
+ * Get inbox messages (from Wix Data)
+ * Replaces /api/gmail/inbox
+ * 
+ * Note: Real Gmail inbox requires IMAP which Wix can't do.
+ * This uses Wix Data collection for messages received via contact forms,
+ * RSVP replies, and other app-generated messages.
+ */
+export async function getInboxMessages(page, perPage, folder) {
+    try {
+        const skip = (page - 1) * perPage;
+
+        const query = wixData.query('InboxMessages')
+            .eq('folder', folder || 'INBOX')
+            .descending('receivedAt')
+            .skip(skip)
+            .limit(perPage);
+
+        const results = await query.find();
+        const total = await wixData.query('InboxMessages')
+            .eq('folder', folder || 'INBOX')
+            .count();
+
+        return {
+            emails: results.items.map(msg => ({
+                id: msg._id,
+                subject: msg.subject || '(no subject)',
+                from: msg.from || 'Unknown',
+                to: msg.to || BANF_EMAIL,
+                date: msg.receivedAt ? msg.receivedAt.toISOString() : '',
+                body: msg.body || '',
+                body_html: msg.bodyHtml || '',
+                seen: msg.read || false,
+                has_attachments: false
+            })),
+            total: total,
+            page: page,
+            per_page: perPage,
+            total_pages: Math.ceil(total / perPage)
+        };
+    } catch (error) {
+        return { emails: [], total: 0, page: 1, per_page: perPage, total_pages: 0 };
+    }
+}
+
+/**
+ * Get a single message
+ * Replaces /api/gmail/email/:id
+ */
+export async function getMessage(messageId) {
+    try {
+        const msg = await wixData.get('InboxMessages', messageId);
+        if (!msg) {
+            return { error: 'Message not found' };
+        }
+
+        return {
+            id: msg._id,
+            subject: msg.subject || '(no subject)',
+            from: msg.from || 'Unknown',
+            to: msg.to || BANF_EMAIL,
+            date: msg.receivedAt ? msg.receivedAt.toISOString() : '',
+            body: msg.body || '',
+            body_html: msg.bodyHtml || '',
+            seen: msg.read || false,
+            has_attachments: false
+        };
+    } catch (error) {
+        return { error: error.message };
+    }
+}
+
+/**
+ * Mark message as read
+ */
+export async function markMessageRead(messageId) {
+    try {
+        const msg = await wixData.get('InboxMessages', messageId);
+        if (msg) {
+            msg.read = true;
+            msg.readAt = new Date();
+            await wixData.update('InboxMessages', msg);
+        }
+        return { success: true };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
+}
+
+/**
+ * Delete message (move to trash)
+ */
+export async function deleteMessage(messageId) {
+    try {
+        const msg = await wixData.get('InboxMessages', messageId);
+        if (msg) {
+            msg.folder = 'TRASH';
+            await wixData.update('InboxMessages', msg);
+        }
+        return { success: true };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
+}
+
+/**
+ * Search messages
+ */
+export async function searchMessages(query) {
+    try {
+        const results = await wixData.query('InboxMessages')
+            .contains('subject', query)
+            .or(wixData.query('InboxMessages').contains('from', query))
+            .or(wixData.query('InboxMessages').contains('body', query))
+            .descending('receivedAt')
+            .limit(50)
+            .find();
+
+        return {
+            results: results.items.map(msg => ({
+                id: msg._id,
+                subject: msg.subject || '(no subject)',
+                from: msg.from || 'Unknown',
+                date: msg.receivedAt ? msg.receivedAt.toISOString() : ''
+            }))
+        };
+    } catch (error) {
+        return { results: [] };
+    }
+}
+
+
+// =====================================================
+// RSVP TRACKING
+// =====================================================
+
+/**
+ * Check RSVP replies for an event
+ * Replaces /api/gmail/rsvp-check
+ */
+export async function checkRSVPReplies(eventName, daysBack) {
+    try {
+        const since = new Date();
+        since.setDate(since.getDate() - (daysBack || 30));
+
+        let query = wixData.query('SentEmails')
+            .eq('type', 'evite')
+            .ge('sentAt', since);
+
+        if (eventName) {
+            query = query.contains('eventName', eventName);
+        }
+
+        const evites = await query.find();
+
+        // Also check RSVP responses stored from contact form / email replies
+        const rsvpQuery = wixData.query('InboxMessages')
+            .contains('subject', 'RSVP')
+            .ge('receivedAt', since);
+
+        const rsvpReplies = await rsvpQuery.find();
+
+        const rsvps = rsvpReplies.items.map(msg => {
+            const subjectUpper = (msg.subject || '').toUpperCase();
+            let status = 'unknown';
+            if (subjectUpper.includes('RSVP YES')) status = 'attending';
+            else if (subjectUpper.includes('RSVP MAYBE')) status = 'maybe';
+            else if (subjectUpper.includes('RSVP NO')) status = 'not_attending';
+
+            return {
+                from: msg.from,
+                subject: msg.subject,
+                date: msg.receivedAt ? msg.receivedAt.toISOString() : '',
+                rsvp_status: status,
+                body: msg.body || ''
+            };
+        });
+
+        return {
+            total_evites_sent: evites.items.length,
+            rsvp_replies: rsvps,
+            summary: {
+                attending: rsvps.filter(r => r.rsvp_status === 'attending').length,
+                maybe: rsvps.filter(r => r.rsvp_status === 'maybe').length,
+                not_attending: rsvps.filter(r => r.rsvp_status === 'not_attending').length,
+                no_response: evites.items.length - rsvps.length
+            }
+        };
+    } catch (error) {
+        return { total_evites_sent: 0, rsvp_replies: [], summary: {} };
+    }
+}
+
+
+// =====================================================
+// UTILITIES
+// =====================================================
+
+/**
+ * Log a sent email to Wix Data for tracking
+ */
+async function logSentEmail(emailInfo) {
+    try {
+        await wixData.insert('SentEmails', {
+            to: emailInfo.to,
+            subject: emailInfo.subject,
+            body: (emailInfo.body || '').substring(0, 5000),
+            sentAt: new Date(),
+            type: emailInfo.type || 'direct'
+        });
+    } catch (e) {
+        console.error('Failed to log sent email:', e);
+    }
+}
+
+/**
+ * Get sent email history
+ */
+export async function getSentEmailHistory(page, perPage) {
+    try {
+        const skip = ((page || 1) - 1) * (perPage || 20);
+
+        const results = await wixData.query('SentEmails')
+            .descending('sentAt')
+            .skip(skip)
+            .limit(perPage || 20)
+            .find();
+
+        return {
+            emails: results.items,
+            total: results.totalCount,
+            page: page || 1
+        };
+    } catch (error) {
+        return { emails: [], total: 0, page: 1 };
+    }
+}

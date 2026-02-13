@@ -1,0 +1,134 @@
+/**
+ * Setup Collections for Email Gateway
+ * =====================================
+ * Run this ONCE to create the 4 required Wix Data collections.
+ * 
+ * Usage: Call setupAllCollections() from a test page or the Wix Editor console.
+ * 
+ * Collections created:
+ *  1. ContactGroups   — Contact group definitions
+ *  2. GroupContacts   — Individual contacts within groups
+ *  3. SentEmails      — Email sending history/log
+ *  4. InboxMessages   — Inbox messages (contact form, RSVP, system)
+ */
+
+import wixData from 'wix-data';
+
+/**
+ * Check if a collection exists by trying to query it
+ */
+async function collectionExists(collectionId) {
+    try {
+        await wixData.query(collectionId).limit(1).find();
+        return true;
+    } catch (e) {
+        return false;
+    }
+}
+
+/**
+ * Insert a seed record to establish collection schema, then remove it
+ * Wix Data collections are schema-on-write — inserting a record with all
+ * fields creates the field definitions automatically.
+ */
+async function ensureCollection(collectionId, seedRecord) {
+    const exists = await collectionExists(collectionId);
+    if (exists) {
+        return { collection: collectionId, status: 'already_exists' };
+    }
+
+    try {
+        // Insert seed record to create collection with field types
+        const result = await wixData.insert(collectionId, seedRecord, { suppressAuth: true });
+
+        // Remove the seed record
+        if (result._id) {
+            await wixData.remove(collectionId, result._id, { suppressAuth: true });
+        }
+
+        return { collection: collectionId, status: 'created', fields: Object.keys(seedRecord) };
+    } catch (e) {
+        return { collection: collectionId, status: 'error', error: e.message };
+    }
+}
+
+/**
+ * Create all 4 required collections for the email gateway
+ */
+export async function setupAllCollections() {
+    const results = [];
+
+    // 1. ContactGroups
+    results.push(await ensureCollection('ContactGroups', {
+        groupName: 'SEED_RECORD',
+        description: 'Seed record for schema creation',
+        createdAt: new Date()
+    }));
+
+    // 2. GroupContacts
+    results.push(await ensureCollection('GroupContacts', {
+        groupName: 'SEED_RECORD',
+        contactName: 'Seed Contact',
+        contactEmail: 'seed@example.com',
+        addedAt: new Date()
+    }));
+
+    // 3. SentEmails
+    results.push(await ensureCollection('SentEmails', {
+        to: 'seed@example.com',
+        subject: 'Seed record',
+        body: 'This is a seed record for schema creation',
+        type: 'email',
+        status: 'seed',
+        sentAt: new Date(),
+        sentBy: 'system',
+        provider: 'none'
+    }));
+
+    // 4. InboxMessages
+    results.push(await ensureCollection('InboxMessages', {
+        from: 'seed@example.com',
+        subject: 'Seed record',
+        body: 'This is a seed record for schema creation',
+        bodyHtml: '<p>Seed</p>',
+        date: new Date(),
+        folder: 'INBOX',
+        isRead: true,
+        hasAttachments: false,
+        source: 'system'
+    }));
+
+    return {
+        success: true,
+        message: 'Collection setup complete',
+        results
+    };
+}
+
+/**
+ * Verify all collections exist and report status
+ */
+export async function verifyCollections() {
+    const collections = ['ContactGroups', 'GroupContacts', 'SentEmails', 'InboxMessages'];
+    const status = {};
+
+    for (const col of collections) {
+        const exists = await collectionExists(col);
+        let count = 0;
+        if (exists) {
+            try {
+                const result = await wixData.query(col).count();
+                count = result;
+            } catch (e) {
+                count = -1;
+            }
+        }
+        status[col] = { exists, count };
+    }
+
+    return {
+        success: true,
+        allExist: Object.values(status).every(s => s.exists),
+        collections: status
+    };
+}

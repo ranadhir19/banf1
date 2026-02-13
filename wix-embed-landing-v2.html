@@ -2886,15 +2886,120 @@
         let currentProgramIndex = 0;
         let currentProgram = null;
         
-        // Radio API endpoints (using the autonomous radio system)
-        const RADIO_API_BASE = 'http://127.0.0.1:5000/api/radio';
-        const RADIO_ENDPOINTS = {
+        // ========== API CONFIGURATION ==========
+        // Auto-detect environment: Wix production vs local development
+        // Production: calls Wix Velo HTTP Functions at /_functions/
+        // Local dev: falls back to localhost Flask services
+        const WIX_SITE_URL = 'https://www.jaxbengali.org';
+        const IS_PRODUCTION = (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1');
+        
+        // Email/Evite API — Wix Velo backend (no local dependency)
+        const WIX_API_BASE = WIX_SITE_URL + '/_functions';
+        const GMAIL_API_BASE = IS_PRODUCTION ? WIX_API_BASE : 'http://127.0.0.1:5001/api/gmail';
+        
+        // Radio API — still requires streaming server (graceful degradation)
+        const RADIO_API_BASE = IS_PRODUCTION ? (WIX_API_BASE) : 'http://127.0.0.1:5000/api/radio';
+        const RADIO_ENDPOINTS = IS_PRODUCTION ? {
+            schedule: `${WIX_API_BASE}/radio_schedule`,
+            currentStatus: `${WIX_API_BASE}/radio_status`,
+            startCurrent: `${WIX_API_BASE}/radio_start`,
+            nextTrack: `${WIX_API_BASE}/radio_next`,
+            previousTrack: `${WIX_API_BASE}/radio_previous`
+        } : {
             schedule: `${RADIO_API_BASE}/autonomous/schedule`,
             currentStatus: `${RADIO_API_BASE}/current-status`,
             startCurrent: `${RADIO_API_BASE}/autonomous/start-current`,
             nextTrack: `${RADIO_API_BASE}/autonomous/next-track`,
             previousTrack: `${RADIO_API_BASE}/autonomous/previous-track`
         };
+        
+        /**
+         * API endpoint mapper - translates local Flask paths to Wix Velo HTTP Function paths
+         * Local:  GMAIL_API_BASE + '/send-evite'  → http://127.0.0.1:5001/api/gmail/send-evite
+         * Prod:   WIX_API_BASE + '/send_evite'    → https://www.jaxbengali.org/_functions/send_evite
+         */
+        function apiUrl(endpoint) {
+            if (!IS_PRODUCTION) return GMAIL_API_BASE + endpoint;
+            
+            // Map Flask REST paths → Wix flat function names
+            const routeMap = {
+                '/status':          '/email_status',
+                '/unread':          '/email_unread',
+                '/send':            '/send_email',
+                '/send-evite':      '/send_evite',
+                '/contacts':        '/contacts',
+                '/contacts/group':  '/contact_group_create',
+                '/rsvp-check':      '/rsvp_check'
+            };
+            
+            // Direct mapping
+            if (routeMap[endpoint]) return WIX_API_BASE + routeMap[endpoint];
+            
+            // Dynamic paths with parameters
+            if (endpoint.startsWith('/inbox'))   return WIX_API_BASE + '/email_inbox' + endpoint.replace('/inbox', '');
+            if (endpoint.startsWith('/search'))  return WIX_API_BASE + '/email_search' + endpoint.replace('/search', '');
+            if (endpoint.startsWith('/email/'))  return WIX_API_BASE + '/email_message?id=' + endpoint.split('/email/')[1].split('?')[0] + (endpoint.includes('?') ? '&' + endpoint.split('?')[1] : '');
+            if (endpoint.startsWith('/mark-read/')) return WIX_API_BASE + '/email_mark_read';
+            if (endpoint.startsWith('/delete/'))    return WIX_API_BASE + '/email_delete';
+            if (endpoint.includes('/contacts/group/') && endpoint.includes('/add'))    return WIX_API_BASE + '/contact_group_add';
+            if (endpoint.includes('/contacts/group/') && endpoint.includes('/remove')) return WIX_API_BASE + '/contact_group_remove';
+            if (endpoint.match(/\/contacts\/group\/[^/]+$/)) return WIX_API_BASE + '/contact_group_delete';
+            
+            // Fallback
+            return WIX_API_BASE + endpoint.replace(/-/g, '_').replace(/\//g, '_');
+        }
+        
+        /**
+         * Enhanced fetch wrapper for Wix API compatibility
+         * - Converts DELETE methods to POST (Wix HTTP functions only support GET/POST)
+         * - Adds group_name/id to body for Wix endpoints that need it
+         */
+        function apiFetch(endpoint, options = {}) {
+            let url = apiUrl(endpoint);
+            let opts = { ...options };
+            
+            if (IS_PRODUCTION) {
+                // Wix only supports GET and POST - convert DELETE to POST
+                if (opts.method === 'DELETE') {
+                    opts.method = 'POST';
+                    // Ensure body has the ID if it was in the URL
+                    const deleteIdMatch = endpoint.match(/\/delete\/(.+)/);
+                    if (deleteIdMatch) {
+                        opts.headers = opts.headers || { 'Content-Type': 'application/json' };
+                        opts.body = JSON.stringify({ id: deleteIdMatch[1] });
+                    }
+                }
+                
+                // For mark-read, extract ID from URL into body
+                const markReadMatch = endpoint.match(/\/mark-read\/(.+)/);
+                if (markReadMatch) {
+                    opts.method = 'POST';
+                    opts.headers = { 'Content-Type': 'application/json' };
+                    opts.body = JSON.stringify({ id: markReadMatch[1] });
+                }
+                
+                // For contact group operations, extract group name from URL into body
+                const groupMatch = endpoint.match(/\/contacts\/group\/([^/]+)/);
+                if (groupMatch) {
+                    const groupName = decodeURIComponent(groupMatch[1]);
+                    opts.method = opts.method || 'POST';
+                    opts.headers = opts.headers || { 'Content-Type': 'application/json' };
+                    
+                    if (endpoint.includes('/add') || endpoint.includes('/remove')) {
+                        // Merge group_name into existing body
+                        let existingBody = {};
+                        try { existingBody = JSON.parse(opts.body || '{}'); } catch(e) {}
+                        existingBody.group_name = groupName;
+                        opts.body = JSON.stringify(existingBody);
+                    } else if (opts.method === 'POST' && !endpoint.includes('/add') && !endpoint.includes('/remove')) {
+                        // Delete group - send group_name in body
+                        opts.body = JSON.stringify({ group_name: groupName });
+                    }
+                }
+            }
+            
+            return fetch(url, opts);
+        }
         
         // Program categories with display info
         const PROGRAM_CATEGORIES = {
@@ -3079,6 +3184,94 @@
             initRadioPlayer();
             fetchCurrentSchedule();
         });
+
+        // ========== ADMIN RADIO CONTROL FUNCTIONS ==========
+        function toggleRadioStatus() {
+            const btn = document.getElementById('radioStatusBtn');
+            const text = document.getElementById('radioStatusText');
+            if (text.textContent === 'Online') {
+                text.textContent = 'Offline';
+                btn.style.background = '#dc3545';
+                alert('Radio station paused — Demo');
+            } else {
+                text.textContent = 'Online';
+                btn.style.background = '';
+                alert('Radio station resumed — Demo');
+            }
+        }
+
+        function adminTogglePlay() {
+            const btn = document.getElementById('adminPlayBtn');
+            if (btn.innerHTML.includes('pause')) {
+                btn.innerHTML = '<i class="fas fa-play me-1"></i>Paused';
+                btn.className = 'btn btn-sm btn-warning';
+                alert('Radio playback paused — Demo');
+            } else {
+                btn.innerHTML = '<i class="fas fa-pause me-1"></i>Playing';
+                btn.className = 'btn btn-sm btn-success';
+                alert('Radio playback resumed — Demo');
+            }
+        }
+
+        function adminSkipTrack(direction) {
+            const label = direction > 0 ? 'Next track loaded' : 'Previous track loaded';
+            const nowPlaying = document.getElementById('adminNowPlaying');
+            const tracks = ['Rabindra Sangeet Special', 'Bengali Modern Hits', 'Folk Melodies', 'Children\'s Hour', 'Evening Ragas', 'Literature Corner'];
+            if (nowPlaying) {
+                const current = tracks.indexOf(nowPlaying.textContent);
+                const next = (current + direction + tracks.length) % tracks.length;
+                nowPlaying.textContent = tracks[next];
+            }
+            alert(label + ' — Demo');
+        }
+
+        function adminRefreshStatus() {
+            // Simulate refresh
+            const listeners = document.getElementById('radioListeners');
+            if (listeners) listeners.textContent = Math.floor(Math.random() * 40) + 10;
+            alert('Status refreshed — Demo');
+        }
+
+        function approveSongRequest(btn) {
+            const row = btn.closest('tr');
+            const song = row.cells[1].textContent;
+            row.style.background = '#d4edda';
+            row.cells[3].innerHTML = '<span class="badge bg-success">Approved</span>';
+            alert('Song request approved: ' + song + ' — Demo');
+        }
+
+        function rejectSongRequest(btn) {
+            const row = btn.closest('tr');
+            const song = row.cells[1].textContent;
+            row.style.background = '#f8d7da';
+            row.cells[3].innerHTML = '<span class="badge bg-danger">Rejected</span>';
+            alert('Song request rejected: ' + song + ' — Demo');
+        }
+
+        // Member song request handler
+        function handleSongRequest(form) {
+            const title = document.getElementById('songRequestTitle').value;
+            const artist = document.getElementById('songRequestArtist').value;
+            const category = document.getElementById('songRequestCategory').value;
+            const dedication = document.getElementById('songDedication').value;
+
+            // Add to My Requests
+            const container = document.getElementById('myRadioRequests');
+            const newRequest = document.createElement('div');
+            newRequest.className = 'd-flex justify-content-between align-items-center p-2 border-bottom';
+            newRequest.innerHTML = `
+                <div>
+                    <strong>${title}</strong><br>
+                    <small class="text-muted">${artist || 'Unknown'} • ${category}</small>
+                    ${dedication ? '<br><small class="text-info"><i class="fas fa-heart me-1"></i>' + dedication.substring(0, 50) + '</small>' : ''}
+                </div>
+                <span class="badge bg-info">Submitted</span>
+            `;
+            container.insertBefore(newRequest, container.firstChild);
+
+            alert('🎵 Song request submitted!\n\nSong: ' + title + '\nArtist: ' + (artist || 'N/A') + '\nCategory: ' + category + (dedication ? '\nDedication: ' + dedication : '') + '\n\nYour request will be reviewed by the radio team.');
+            form.reset();
+        }
 
         // Language Toggle for President's Message
         function toggleLanguage(lang) {
@@ -4007,6 +4200,55 @@
                         <h2>Events & RSVP</h2>
                         <p>Register for upcoming events and manage your RSVPs</p>
                     </div>
+
+                    <!-- RSVP Form (hidden by default) -->
+                    <div id="memberRsvpFormContainer" style="display:none; margin-bottom:1.5rem;">
+                        <div class="portal-form-card" style="border:2px solid var(--banf-orange);">
+                            <h4 id="rsvpFormTitle">RSVP for Event</h4>
+                            <form id="memberRsvpForm" onsubmit="return handleMemberRsvp(event)">
+                                <input type="hidden" id="rsvpEventId" value="">
+                                <div class="row g-3">
+                                    <div class="col-md-6">
+                                        <label class="form-label fw-bold">RSVP Status *</label>
+                                        <select class="form-control" id="rsvpStatus" required onchange="toggleRsvpDetails()">
+                                            <option value="">Select...</option>
+                                            <option value="attending">✅ Yes, I'll attend</option>
+                                            <option value="maybe">🤔 Maybe</option>
+                                            <option value="not_attending">❌ Can't make it</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label class="form-label fw-bold"># Adults</label>
+                                        <input type="number" class="form-control" id="rsvpAdults" min="0" max="10" value="1">
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label class="form-label fw-bold"># Kids</label>
+                                        <input type="number" class="form-control" id="rsvpKids" min="0" max="10" value="0">
+                                    </div>
+                                    <div class="col-md-6" id="rsvpDietaryCol">
+                                        <label class="form-label fw-bold">Dietary Requirements</label>
+                                        <select class="form-control" id="rsvpDietary">
+                                            <option value="None">None</option>
+                                            <option value="Vegetarian">Vegetarian</option>
+                                            <option value="Vegan">Vegan</option>
+                                            <option value="Jain">Jain (no onion/garlic)</option>
+                                            <option value="Gluten-free">Gluten-free</option>
+                                            <option value="Nut allergy">Nut allergy</option>
+                                            <option value="Other">Other (specify in notes)</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label fw-bold">Notes</label>
+                                        <input type="text" class="form-control" id="rsvpNotes" placeholder="Any special requests...">
+                                    </div>
+                                </div>
+                                <div class="mt-3" style="display:flex; gap:0.5rem;">
+                                    <button type="submit" class="portal-feature-btn"><i class="fas fa-check me-1"></i> Submit RSVP</button>
+                                    <button type="button" class="portal-feature-btn secondary" onclick="document.getElementById('memberRsvpFormContainer').style.display='none'"><i class="fas fa-times me-1"></i> Cancel</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
                     
                     <div class="portal-features-grid">
                         <div class="portal-feature-card" style="border: 2px solid var(--banf-orange);">
@@ -4014,7 +4256,7 @@
                             <h4>Nabo Borsho 1433</h4>
                             <p><strong>April 25, 2026</strong> • Bengali New Year celebration with cultural program and feast.</p>
                             <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
-                                <button class="portal-feature-btn" onclick="alert('RSVP submitted - Demo')">
+                                <button class="portal-feature-btn" onclick="openMemberRsvp('EVT-001', 'Nabo Borsho 1433')">
                                     <i class="fas fa-user-check"></i> RSVP Now
                                 </button>
                                 <button class="portal-feature-btn secondary" onclick="alert('Event Details - Demo')">
@@ -4027,8 +4269,8 @@
                             <div class="feature-icon-box" style="background: linear-gradient(135deg, #4CAF50, #8BC34A);"><i class="fas fa-campground"></i></div>
                             <h4>Summer Camp 2026</h4>
                             <p><strong>June 2026</strong> • Bengali language and culture camp for children ages 5-15.</p>
-                            <button class="portal-feature-btn secondary">
-                                <i class="fas fa-clock"></i> Coming Soon
+                            <button class="portal-feature-btn" onclick="openMemberRsvp('EVT-002', 'Summer Camp 2026')">
+                                <i class="fas fa-user-check"></i> RSVP Now
                             </button>
                         </div>
                         
@@ -4039,6 +4281,19 @@
                             <button class="portal-feature-btn secondary">
                                 <i class="fas fa-clock"></i> Coming Soon
                             </button>
+                        </div>
+                    </div>
+
+                    <!-- My RSVPs -->
+                    <div style="margin-top: 2rem;">
+                        <h4><i class="fas fa-clipboard-check me-2"></i>My RSVPs</h4>
+                        <div class="portal-data-table">
+                            <table>
+                                <thead><tr><th>Event</th><th>Status</th><th>Adults</th><th>Kids</th><th>Dietary</th><th>Action</th></tr></thead>
+                                <tbody id="myRsvpTableBody">
+                                    <tr><td colspan="6" class="text-center py-3 text-muted">No RSVPs yet. RSVP to an event above!</td></tr>
+                                </tbody>
+                            </table>
                         </div>
                     </div>
                 </section>
@@ -4154,43 +4409,94 @@
                 <!-- RADIO SECTION -->
                 <section id="portalRadio" class="portal-section">
                     <div class="portal-page-header">
-                        <h2>Request Songs</h2>
-                        <p>Request your favorite Bengali songs on BANF Radio 24/7</p>
+                        <h2>BANF Radio 24/7</h2>
+                        <p>Listen live & request your favorite Bengali songs</p>
                     </div>
                     
                     <div class="row">
                         <div class="col-lg-6 mb-4">
                             <div class="portal-form-card">
+                                <h4 style="margin-bottom: 1rem;"><i class="fas fa-broadcast-tower me-2"></i>Now Playing</h4>
+                                <div style="background: linear-gradient(135deg, #673AB7, #9C27B0); border-radius: 16px; padding: 2rem; color: #fff; text-align: center;" id="memberRadioPlayer">
+                                    <i class="fas fa-music fa-3x mb-3"></i>
+                                    <h5 id="memberNowPlaying">BANF Radio 24/7</h5>
+                                    <p style="opacity: 0.8;" id="memberRadioCategory">Bengali Music Non-Stop</p>
+                                    <div class="d-flex justify-content-center gap-2 mt-3">
+                                        <button class="btn btn-light rounded-circle" onclick="skipStation(-1)" title="Previous" style="width:40px;height:40px;">
+                                            <i class="fas fa-backward"></i>
+                                        </button>
+                                        <button class="btn btn-light btn-lg rounded-circle" onclick="toggleRadio()" id="memberPlayBtn" title="Play/Pause" style="width:55px;height:55px;">
+                                            <i class="fas fa-play"></i>
+                                        </button>
+                                        <button class="btn btn-light rounded-circle" onclick="skipStation(1)" title="Next" style="width:40px;height:40px;">
+                                            <i class="fas fa-forward"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                                
+                                <!-- Today's Schedule Preview -->
+                                <h5 class="mt-4 mb-3"><i class="fas fa-clock me-2"></i>Today's Schedule</h5>
+                                <div style="max-height: 200px; overflow-y: auto;">
+                                    <div class="d-flex justify-content-between p-2 border-bottom"><span>🙏 6 AM — Prabhati Sangeet</span><small class="text-muted">Devotional</small></div>
+                                    <div class="d-flex justify-content-between p-2 border-bottom"><span>🎻 8 AM — Morning Ragas</span><small class="text-muted">Classical</small></div>
+                                    <div class="d-flex justify-content-between p-2 border-bottom"><span>🎻 10 AM — Rabindra Sangeet</span><small class="text-muted">Classical</small></div>
+                                    <div class="d-flex justify-content-between p-2 border-bottom" style="background:#e8f5e9;"><span>🎵 12 PM — Bengali Modern Hits</span><small class="text-success">Now</small></div>
+                                    <div class="d-flex justify-content-between p-2 border-bottom"><span>🪘 2 PM — Folk Melodies</span><small class="text-muted">Folk</small></div>
+                                    <div class="d-flex justify-content-between p-2 border-bottom"><span>👶 4 PM — Children's Hour</span><small class="text-muted">Children</small></div>
+                                    <div class="d-flex justify-content-between p-2 border-bottom"><span>🎻 6 PM — Evening Ragas</span><small class="text-muted">Classical</small></div>
+                                    <div class="d-flex justify-content-between p-2"><span>📚 8 PM — Literature Corner</span><small class="text-muted">Literature</small></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-lg-6">
+                            <div class="portal-form-card">
                                 <h4 style="margin-bottom: 1.5rem;"><i class="fas fa-music me-2"></i>Song Request Form</h4>
-                                <form onsubmit="event.preventDefault(); alert('Song request submitted - Demo'); this.reset();">
+                                <form onsubmit="event.preventDefault(); handleSongRequest(this);">
                                     <div class="mb-3">
                                         <label class="form-label">Song Title</label>
-                                        <input type="text" class="form-control" placeholder="e.g., Amar Sonar Bangla" required>
+                                        <input type="text" class="form-control" id="songRequestTitle" placeholder="e.g., Amar Sonar Bangla" required>
                                     </div>
                                     <div class="mb-3">
                                         <label class="form-label">Artist Name</label>
-                                        <input type="text" class="form-control" placeholder="e.g., Rabindranath Tagore">
+                                        <input type="text" class="form-control" id="songRequestArtist" placeholder="e.g., Rabindranath Tagore">
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">Category</label>
+                                        <select class="form-control" id="songRequestCategory">
+                                            <option value="classical">Classical / Rabindra Sangeet</option>
+                                            <option value="folk">Folk Music (Baul, Bhatiyali)</option>
+                                            <option value="modern">Modern Bengali</option>
+                                            <option value="devotional">Devotional</option>
+                                            <option value="film">Film Songs</option>
+                                            <option value="children">Children's Songs</option>
+                                        </select>
                                     </div>
                                     <div class="mb-3">
                                         <label class="form-label">Dedication Message (Optional)</label>
-                                        <textarea class="form-control" rows="3" placeholder="Dedicate this song to someone special..."></textarea>
+                                        <textarea class="form-control" rows="3" id="songDedication" placeholder="Dedicate this song to someone special..."></textarea>
                                     </div>
                                     <button type="submit" class="portal-feature-btn">
                                         <i class="fas fa-paper-plane"></i> Submit Request
                                     </button>
                                 </form>
-                            </div>
-                        </div>
-                        <div class="col-lg-6">
-                            <div class="portal-form-card">
-                                <h4 style="margin-bottom: 1rem;"><i class="fas fa-broadcast-tower me-2"></i>Now Playing</h4>
-                                <div style="background: linear-gradient(135deg, #673AB7, #9C27B0); border-radius: 16px; padding: 2rem; color: #fff; text-align: center;">
-                                    <i class="fas fa-music fa-3x mb-3"></i>
-                                    <h5>BANF Radio 24/7</h5>
-                                    <p style="opacity: 0.8;">Bengali Music Non-Stop</p>
-                                    <button class="btn btn-light btn-lg rounded-pill mt-2" onclick="alert('Radio Player - Demo')">
-                                        <i class="fas fa-play me-2"></i> Listen Live
-                                    </button>
+                                
+                                <!-- My Requests -->
+                                <h5 class="mt-4 mb-3"><i class="fas fa-list me-2"></i>My Recent Requests</h5>
+                                <div id="myRadioRequests">
+                                    <div class="d-flex justify-content-between align-items-center p-2 border-bottom">
+                                        <div>
+                                            <strong>Tumi Robe Nirobe</strong><br>
+                                            <small class="text-muted">Rabindranath Tagore • Classical</small>
+                                        </div>
+                                        <span class="badge bg-success">Played</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between align-items-center p-2">
+                                        <div>
+                                            <strong>Ami Chini Go Chini</strong><br>
+                                            <small class="text-muted">Rabindranath Tagore • Classical</small>
+                                        </div>
+                                        <span class="badge bg-warning text-dark">Queued</span>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -4309,6 +4615,10 @@
                         <i class="fas fa-users"></i>
                         <span>All Members</span>
                     </a>
+                    <a href="#" class="admin-nav-item" onclick="showAdminSection('dataImport', this); return false;">
+                        <i class="fas fa-file-excel"></i>
+                        <span>Data Import (Excel)</span>
+                    </a>
                     <a href="#" class="admin-nav-item" onclick="showAdminSection('payments', this); return false;">
                         <i class="fas fa-credit-card"></i>
                         <span>Payment Verification</span>
@@ -4321,6 +4631,10 @@
                     <a href="#" class="admin-nav-item" onclick="showAdminSection('events', this); return false;">
                         <i class="fas fa-calendar-alt"></i>
                         <span>Event Management</span>
+                    </a>
+                    <a href="#" class="admin-nav-item" onclick="showAdminSection('evite', this); return false;">
+                        <i class="fas fa-envelope-open-text"></i>
+                        <span>Evite / Invitations</span>
                     </a>
                     <a href="#" class="admin-nav-item" onclick="showAdminSection('rsvps', this); return false;">
                         <i class="fas fa-user-check"></i>
@@ -4342,6 +4656,11 @@
                     <a href="#" class="admin-nav-item" onclick="showAdminSection('announcements', this); return false;">
                         <i class="fas fa-bullhorn"></i>
                         <span>Announcements</span>
+                    </a>
+                    <a href="#" class="admin-nav-item" onclick="showAdminSection('gmail', this); return false;">
+                        <i class="fas fa-envelope"></i>
+                        <span>Email (Gmail)</span>
+                        <span class="admin-badge" id="gmailUnreadBadge" style="display:none">0</span>
                     </a>
                 </div>
 
@@ -4577,6 +4896,10 @@
                             <h2>RSVPs & Check-ins</h2>
                             <p>Track attendee registrations and check-ins</p>
                         </div>
+                        <button class="admin-primary" onclick="exportEviteReport()"><i class="fas fa-download"></i> Export Report</button>
+                    </div>
+                    <div id="rsvpSummaryStats" class="admin-stats-grid" style="margin-bottom: 1.5rem;">
+                        <!-- Populated by renderRsvpDashboard -->
                     </div>
                     <div class="admin-table">
                         <table>
@@ -4585,18 +4908,264 @@
                                     <th>Event</th>
                                     <th>Member</th>
                                     <th>Status</th>
+                                    <th>Adults</th>
+                                    <th>Kids</th>
+                                    <th>Dietary</th>
+                                    <th>Notes</th>
                                     <th>Check-in</th>
                                 </tr>
                             </thead>
-                            <tbody>
+                            <tbody id="rsvpTableBody">
                                 <tr>
                                     <td>Nabo Borsho 1433</td>
                                     <td>Member #45</td>
                                     <td><span class="status-badge active">Registered</span></td>
+                                    <td>2</td>
+                                    <td>1</td>
+                                    <td>None</td>
+                                    <td>-</td>
                                     <td><button class="admin-secondary">Check-in</button></td>
                                 </tr>
                             </tbody>
                         </table>
+                    </div>
+                </section>
+
+                <!-- ========== EVITE / INVITATION SECTION ========== -->
+                <section id="adminEvite" class="admin-section">
+                    <div class="admin-page-header">
+                        <div>
+                            <h2><i class="fas fa-envelope-open-text me-2"></i>Evite / Invitations</h2>
+                            <p>Send event invitations and track RSVP responses</p>
+                        </div>
+                        <button class="admin-primary" onclick="openSendEviteForm()"><i class="fas fa-paper-plane"></i> Send New Evite</button>
+                    </div>
+
+                    <!-- Send Evite Form (hidden by default) -->
+                    <div id="sendEviteFormContainer" style="display:none; margin-bottom: 2rem;">
+                        <div class="admin-card" style="border: 2px solid var(--gold);">
+                            <h4><i class="fas fa-paper-plane me-2"></i>Compose Invitation</h4>
+                            <form id="sendEviteForm" onsubmit="return handleSendEvite(event)">
+                                <div class="row g-3">
+                                    <div class="col-md-6">
+                                        <label class="form-label fw-bold">Event Name *</label>
+                                        <select class="form-control" id="eviteEventName" required>
+                                            <option value="">Select event...</option>
+                                            <option value="Nabo Borsho 1433">Nabo Borsho 1433 (Apr 25, 2026)</option>
+                                            <option value="Summer Camp 2026">Summer Camp 2026 (Jun 15, 2026)</option>
+                                            <option value="Spandan 2026">Spandan 2026 (Aug 2026)</option>
+                                            <option value="Mahalaya 2026">Mahalaya 2026 (Oct 2026)</option>
+                                            <option value="Durga Puja 2026">Durga Puja 2026 (Oct 2026)</option>
+                                            <option value="Custom">Custom Event...</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label fw-bold">Template</label>
+                                        <select class="form-control" id="eviteTemplate" onchange="applyEviteTemplate()">
+                                            <option value="">Select template...</option>
+                                            <option value="TPL-001">🪷 Cultural Event</option>
+                                            <option value="TPL-002">📋 Meeting</option>
+                                            <option value="TPL-003">🌳 Picnic/Outing</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label fw-bold">Event Date *</label>
+                                        <input type="date" class="form-control" id="eviteDate" required>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label fw-bold">Event Time</label>
+                                        <input type="text" class="form-control" id="eviteTime" placeholder="e.g. 5:00 PM - 10:00 PM">
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label fw-bold">Venue</label>
+                                        <input type="text" class="form-control" id="eviteVenue" placeholder="Event location">
+                                    </div>
+                                    <div class="col-12">
+                                        <label class="form-label fw-bold">Recipients</label>
+                                        <select class="form-control" id="eviteRecipients">
+                                            <option value="all">All Members (156)</option>
+                                            <option value="active">Active Members Only (148)</option>
+                                            <option value="family">Family Members (92)</option>
+                                            <option value="ec">EC Members Only (10)</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-12">
+                                        <label class="form-label fw-bold">Subject Line</label>
+                                        <input type="text" class="form-control" id="eviteSubject" placeholder="You're invited to...">
+                                    </div>
+                                    <div class="col-12">
+                                        <label class="form-label fw-bold">Invitation Message</label>
+                                        <textarea class="form-control" id="eviteMessage" rows="6" placeholder="Write your invitation message..."></textarea>
+                                    </div>
+                                    <div class="col-12">
+                                        <div class="form-check mb-2">
+                                            <input class="form-check-input" type="checkbox" id="eviteCollectDietary" checked>
+                                            <label class="form-check-label">Collect dietary requirements</label>
+                                        </div>
+                                        <div class="form-check mb-2">
+                                            <input class="form-check-input" type="checkbox" id="eviteCollectKids" checked>
+                                            <label class="form-check-label">Collect adult/kid count</label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" id="eviteAllowMaybe" checked>
+                                            <label class="form-check-label">Allow "Maybe" responses</label>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="mt-3" style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+                                    <button type="submit" class="admin-primary"><i class="fas fa-paper-plane me-1"></i> Send Invitations</button>
+                                    <button type="button" class="admin-secondary" onclick="previewEvite()"><i class="fas fa-eye me-1"></i> Preview</button>
+                                    <button type="button" class="admin-secondary" onclick="document.getElementById('sendEviteFormContainer').style.display='none'"><i class="fas fa-times me-1"></i> Cancel</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+
+                    <!-- Evite History / Sent Invitations -->
+                    <div id="eviteHistoryContainer">
+                        <h4 class="mb-3"><i class="fas fa-history me-2"></i>Sent Invitations</h4>
+                        <div id="eviteHistoryList" class="admin-card-grid">
+                            <!-- Populated by renderEviteHistory() -->
+                        </div>
+                    </div>
+
+                    <!-- RSVP Report Modal Area -->
+                    <div id="eviteReportArea" style="display:none; margin-top: 2rem;">
+                        <div class="admin-card" style="border-left: 4px solid var(--gold);">
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+                                <h4 id="eviteReportTitle"><i class="fas fa-chart-bar me-2"></i>RSVP Report</h4>
+                                <div>
+                                    <button class="admin-secondary" onclick="exportEviteReport()"><i class="fas fa-file-csv me-1"></i> Export CSV</button>
+                                    <button class="admin-secondary" onclick="document.getElementById('eviteReportArea').style.display='none'"><i class="fas fa-times me-1"></i> Close</button>
+                                </div>
+                            </div>
+                            <div id="eviteReportStats" class="admin-stats-grid" style="margin-bottom: 1rem;"></div>
+                            <div id="eviteReportDietary" style="margin-bottom: 1rem;"></div>
+                            <div class="admin-table">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>Member</th>
+                                            <th>Status</th>
+                                            <th>Adults</th>
+                                            <th>Kids</th>
+                                            <th>Dietary</th>
+                                            <th>Notes</th>
+                                            <th>Responded</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="eviteReportTableBody"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ========== DATA IMPORT (EXCEL) SECTION ========== -->
+                <section id="adminDataImport" class="admin-section">
+                    <div class="admin-page-header">
+                        <div>
+                            <h2><i class="fas fa-file-excel me-2"></i>Data Import (Excel)</h2>
+                            <p>Upload member data, event data, and payment records via Excel/CSV</p>
+                        </div>
+                    </div>
+
+                    <div class="admin-card-grid">
+                        <div class="admin-card">
+                            <div class="admin-card-header">
+                                <div class="admin-card-icon"><i class="fas fa-users"></i></div>
+                                <div>
+                                    <h4>Member Import</h4>
+                                    <span class="status-badge active">Ready</span>
+                                </div>
+                            </div>
+                            <p>Upload member list from Excel/CSV. Required columns: First Name, Last Name, Email, Phone, Membership Type.</p>
+                            <input type="file" id="memberImportFile" accept=".xlsx,.xls,.csv" style="display:none" onchange="handleExcelUpload('members', this)">
+                            <div class="admin-actions">
+                                <button class="admin-primary" onclick="document.getElementById('memberImportFile').click()"><i class="fas fa-upload me-1"></i> Upload</button>
+                                <button class="admin-secondary" onclick="downloadTemplate('members')"><i class="fas fa-download me-1"></i> Template</button>
+                            </div>
+                        </div>
+
+                        <div class="admin-card">
+                            <div class="admin-card-header">
+                                <div class="admin-card-icon"><i class="fas fa-calendar-alt"></i></div>
+                                <div>
+                                    <h4>Event Import</h4>
+                                    <span class="status-badge active">Ready</span>
+                                </div>
+                            </div>
+                            <p>Upload event schedule from Excel. Required columns: Event Name, Date, Time, Venue, Description.</p>
+                            <input type="file" id="eventImportFile" accept=".xlsx,.xls,.csv" style="display:none" onchange="handleExcelUpload('events', this)">
+                            <div class="admin-actions">
+                                <button class="admin-primary" onclick="document.getElementById('eventImportFile').click()"><i class="fas fa-upload me-1"></i> Upload</button>
+                                <button class="admin-secondary" onclick="downloadTemplate('events')"><i class="fas fa-download me-1"></i> Template</button>
+                            </div>
+                        </div>
+
+                        <div class="admin-card">
+                            <div class="admin-card-header">
+                                <div class="admin-card-icon"><i class="fas fa-credit-card"></i></div>
+                                <div>
+                                    <h4>Payment Import</h4>
+                                    <span class="status-badge active">Ready</span>
+                                </div>
+                            </div>
+                            <p>Upload payment records from Excel. Required: Member Name, Amount, Date, Type, Status.</p>
+                            <input type="file" id="paymentImportFile" accept=".xlsx,.xls,.csv" style="display:none" onchange="handleExcelUpload('payments', this)">
+                            <div class="admin-actions">
+                                <button class="admin-primary" onclick="document.getElementById('paymentImportFile').click()"><i class="fas fa-upload me-1"></i> Upload</button>
+                                <button class="admin-secondary" onclick="downloadTemplate('payments')"><i class="fas fa-download me-1"></i> Template</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Import Preview Area -->
+                    <div id="importPreviewArea" style="display:none; margin-top: 2rem;">
+                        <div class="admin-card" style="border-left: 4px solid #4CAF50;">
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+                                <h4 id="importPreviewTitle"><i class="fas fa-table me-2"></i>Import Preview</h4>
+                                <div>
+                                    <button class="admin-primary" id="confirmImportBtn" onclick="confirmImport()"><i class="fas fa-check me-1"></i> Confirm Import</button>
+                                    <button class="admin-secondary" onclick="document.getElementById('importPreviewArea').style.display='none'"><i class="fas fa-times me-1"></i> Cancel</button>
+                                </div>
+                            </div>
+                            <div id="importPreviewStats" class="mb-3"></div>
+                            <div class="admin-table" style="max-height: 400px; overflow-y: auto;">
+                                <table>
+                                    <thead id="importPreviewHead"></thead>
+                                    <tbody id="importPreviewBody"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Import History -->
+                    <div style="margin-top: 2rem;">
+                        <h4><i class="fas fa-history me-2"></i>Import History</h4>
+                        <div class="admin-table">
+                            <table>
+                                <thead>
+                                    <tr><th>Date</th><th>Type</th><th>Records</th><th>Status</th><th>Imported By</th></tr>
+                                </thead>
+                                <tbody id="importHistoryBody">
+                                    <tr>
+                                        <td>Jan 15, 2026</td>
+                                        <td>Members</td>
+                                        <td>45 records</td>
+                                        <td><span class="status-badge active">Success</span></td>
+                                        <td>Admin User</td>
+                                    </tr>
+                                    <tr>
+                                        <td>Feb 01, 2026</td>
+                                        <td>Payments</td>
+                                        <td>23 records</td>
+                                        <td><span class="status-badge active">Success</span></td>
+                                        <td>Subir Ghosh</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </section>
 
@@ -4660,9 +5229,169 @@
                     <div class="admin-page-header">
                         <div>
                             <h2>Radio Control Panel</h2>
-                            <p>Manage BANF Radio broadcasting</p>
+                            <p>Manage BANF Radio 24/7 broadcasting & schedule</p>
                         </div>
-                        <button class="admin-primary"><i class="fas fa-broadcast-tower"></i> Online</button>
+                        <button class="admin-primary" id="radioStatusBtn" onclick="toggleRadioStatus()"><i class="fas fa-broadcast-tower"></i> <span id="radioStatusText">Online</span></button>
+                    </div>
+
+                    <!-- Radio Status Dashboard -->
+                    <div class="row g-4 mb-4">
+                        <div class="col-md-3">
+                            <div class="stat-card" style="border-left: 4px solid #4CAF50;">
+                                <div class="stat-number" style="color: #4CAF50;" id="radioListeners">24</div>
+                                <div class="stat-label">Active Listeners</div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="stat-card" style="border-left: 4px solid #2196F3;">
+                                <div class="stat-number" style="color: #2196F3;" id="radioUptime">99.2%</div>
+                                <div class="stat-label">Uptime (30 days)</div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="stat-card" style="border-left: 4px solid #FF9800;">
+                                <div class="stat-number" style="color: #FF9800;" id="radioSongRequests">12</div>
+                                <div class="stat-label">Song Requests</div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="stat-card" style="border-left: 4px solid #9C27B0;">
+                                <div class="stat-number" style="color: #9C27B0;" id="radioLibrarySize">1,247</div>
+                                <div class="stat-label">Songs in Library</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Now Playing & Controls -->
+                    <div class="row g-4 mb-4">
+                        <div class="col-lg-6">
+                            <div class="admin-card">
+                                <h5><i class="fas fa-play-circle me-2 text-success"></i>Now Playing</h5>
+                                <div class="p-3 rounded-3 mb-3" style="background: linear-gradient(135deg, #673AB7, #9C27B0); color: #fff;">
+                                    <div class="d-flex align-items-center">
+                                        <div class="me-3" style="font-size: 2.5rem;">🎵</div>
+                                        <div>
+                                            <h5 class="mb-1" id="adminNowPlaying">Rabindra Sangeet Special</h5>
+                                            <p class="mb-0 opacity-75" id="adminNowCategory">Classical Music</p>
+                                            <small class="opacity-50" id="adminNowTime">Playing since 2:00 PM</small>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="d-flex gap-2 flex-wrap">
+                                    <button class="btn btn-sm btn-outline-primary" onclick="adminSkipTrack(-1)"><i class="fas fa-backward me-1"></i>Previous</button>
+                                    <button class="btn btn-sm btn-success" onclick="adminTogglePlay()" id="adminPlayBtn"><i class="fas fa-pause me-1"></i>Playing</button>
+                                    <button class="btn btn-sm btn-outline-primary" onclick="adminSkipTrack(1)"><i class="fas fa-forward me-1"></i>Next</button>
+                                    <button class="btn btn-sm btn-outline-warning" onclick="adminRefreshStatus()"><i class="fas fa-sync-alt me-1"></i>Refresh</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-lg-6">
+                            <div class="admin-card">
+                                <h5><i class="fas fa-list me-2 text-info"></i>Today's Schedule</h5>
+                                <div class="table-responsive" style="max-height: 250px; overflow-y: auto;">
+                                    <table class="table table-sm mb-0" id="radioScheduleTable">
+                                        <thead><tr><th>Time</th><th>Program</th><th>Category</th><th>Status</th></tr></thead>
+                                        <tbody>
+                                            <tr class="table-success"><td>6:00 AM</td><td>Prabhati Sangeet</td><td>Devotional</td><td><span class="badge bg-success">Completed</span></td></tr>
+                                            <tr class="table-success"><td>8:00 AM</td><td>Morning Ragas</td><td>Classical</td><td><span class="badge bg-success">Completed</span></td></tr>
+                                            <tr class="table-success"><td>10:00 AM</td><td>Rabindra Sangeet</td><td>Classical</td><td><span class="badge bg-success">Completed</span></td></tr>
+                                            <tr class="table-warning"><td>12:00 PM</td><td>Bengali Modern Hits</td><td>Modern Music</td><td><span class="badge bg-warning text-dark">Now Playing</span></td></tr>
+                                            <tr><td>2:00 PM</td><td>Folk Melodies</td><td>Folk Music</td><td><span class="badge bg-secondary">Upcoming</span></td></tr>
+                                            <tr><td>4:00 PM</td><td>Children's Hour</td><td>Children</td><td><span class="badge bg-secondary">Upcoming</span></td></tr>
+                                            <tr><td>6:00 PM</td><td>Evening Ragas</td><td>Classical</td><td><span class="badge bg-secondary">Upcoming</span></td></tr>
+                                            <tr><td>8:00 PM</td><td>Literature Corner</td><td>Literature</td><td><span class="badge bg-secondary">Upcoming</span></td></tr>
+                                            <tr><td>10:00 PM</td><td>Night Music</td><td>Modern Music</td><td><span class="badge bg-secondary">Upcoming</span></td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Song Requests & Library -->
+                    <div class="row g-4">
+                        <div class="col-lg-6">
+                            <div class="admin-card">
+                                <h5><i class="fas fa-hand-paper me-2 text-warning"></i>Pending Song Requests</h5>
+                                <div class="table-responsive">
+                                    <table class="table table-sm" id="songRequestsTable">
+                                        <thead><tr><th>Member</th><th>Song</th><th>Artist</th><th>Actions</th></tr></thead>
+                                        <tbody>
+                                            <tr>
+                                                <td>Amit Roy</td>
+                                                <td>Amar Sonar Bangla</td>
+                                                <td>Rabindranath Tagore</td>
+                                                <td>
+                                                    <button class="btn btn-sm btn-success" onclick="approveSongRequest(this)" title="Approve"><i class="fas fa-check"></i></button>
+                                                    <button class="btn btn-sm btn-danger" onclick="rejectSongRequest(this)" title="Reject"><i class="fas fa-times"></i></button>
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <td>Shreya Das</td>
+                                                <td>Ekla Cholo Re</td>
+                                                <td>Rabindranath Tagore</td>
+                                                <td>
+                                                    <button class="btn btn-sm btn-success" onclick="approveSongRequest(this)" title="Approve"><i class="fas fa-check"></i></button>
+                                                    <button class="btn btn-sm btn-danger" onclick="rejectSongRequest(this)" title="Reject"><i class="fas fa-times"></i></button>
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <td>Rina Mukherjee</td>
+                                                <td>Ami Tomay Joto</td>
+                                                <td>Kishore Kumar</td>
+                                                <td>
+                                                    <button class="btn btn-sm btn-success" onclick="approveSongRequest(this)" title="Approve"><i class="fas fa-check"></i></button>
+                                                    <button class="btn btn-sm btn-danger" onclick="rejectSongRequest(this)" title="Reject"><i class="fas fa-times"></i></button>
+                                                </td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-lg-6">
+                            <div class="admin-card">
+                                <h5><i class="fas fa-database me-2 text-primary"></i>Music Library</h5>
+                                <div class="row g-3 mb-3">
+                                    <div class="col-6">
+                                        <div class="p-2 rounded text-center" style="background: rgba(139,69,19,0.1);">
+                                            <strong>🎻 Classical</strong><br><span class="text-muted">342 songs</span>
+                                        </div>
+                                    </div>
+                                    <div class="col-6">
+                                        <div class="p-2 rounded text-center" style="background: rgba(34,139,34,0.1);">
+                                            <strong>🪘 Folk</strong><br><span class="text-muted">218 songs</span>
+                                        </div>
+                                    </div>
+                                    <div class="col-6">
+                                        <div class="p-2 rounded text-center" style="background: rgba(65,105,225,0.1);">
+                                            <strong>🎵 Modern</strong><br><span class="text-muted">405 songs</span>
+                                        </div>
+                                    </div>
+                                    <div class="col-6">
+                                        <div class="p-2 rounded text-center" style="background: rgba(255,99,71,0.1);">
+                                            <strong>🙏 Devotional</strong><br><span class="text-muted">157 songs</span>
+                                        </div>
+                                    </div>
+                                    <div class="col-6">
+                                        <div class="p-2 rounded text-center" style="background: rgba(128,0,128,0.1);">
+                                            <strong>📚 Literature</strong><br><span class="text-muted">89 readings</span>
+                                        </div>
+                                    </div>
+                                    <div class="col-6">
+                                        <div class="p-2 rounded text-center" style="background: rgba(255,105,180,0.1);">
+                                            <strong>👶 Children</strong><br><span class="text-muted">36 programs</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <button class="btn btn-sm btn-outline-primary" onclick="alert('Upload Song - Demo: Opens file browser to add songs to library')">
+                                    <i class="fas fa-upload me-1"></i>Upload Song
+                                </button>
+                                <button class="btn btn-sm btn-outline-secondary ms-1" onclick="alert('Manage Library - Demo: Opens full library management view')">
+                                    <i class="fas fa-list me-1"></i>Full Library
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </section>
 
@@ -4713,6 +5442,184 @@
                             <p>Upload and manage EC meeting minutes</p>
                         </div>
                         <button class="admin-primary"><i class="fas fa-upload"></i> Upload Minutes</button>
+                    </div>
+                </section>
+
+                <!-- ========== GMAIL / EMAIL SECTION ========== -->
+                <section id="adminGmail" class="admin-section">
+                    <div class="admin-page-header">
+                        <div>
+                            <h2><i class="fas fa-envelope me-2"></i>Email Management (Gmail)</h2>
+                            <p>Read, send, and manage emails from <strong>banfjax@gmail.com</strong></p>
+                        </div>
+                        <div style="display:flex;gap:0.5rem;">
+                            <button class="admin-secondary" onclick="gmailCheckConnection()"><i class="fas fa-plug me-1"></i> Check Connection</button>
+                            <button class="admin-primary" onclick="gmailOpenCompose()"><i class="fas fa-pen me-1"></i> Compose Email</button>
+                        </div>
+                    </div>
+
+                    <!-- Connection Status -->
+                    <div id="gmailConnectionStatus" class="admin-card" style="border-left:4px solid #ccc;margin-bottom:1rem;">
+                        <div style="display:flex;align-items:center;gap:1rem;">
+                            <i class="fas fa-circle" id="gmailStatusIcon" style="color:#ccc;font-size:1.2rem;"></i>
+                            <div>
+                                <strong id="gmailStatusText">Checking connection...</strong>
+                                <p class="mb-0 text-muted" id="gmailStatusDetail">Click "Check Connection" to verify Gmail access</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Stats Row -->
+                    <div class="admin-stats-grid" id="gmailStatsRow" style="margin-bottom:1.5rem;">
+                        <div class="admin-stat-card"><div class="admin-stat-value" id="gmailStatInbox">--</div><div class="admin-stat-label">Inbox</div></div>
+                        <div class="admin-stat-card"><div class="admin-stat-value" id="gmailStatUnread" style="color:#f44336">--</div><div class="admin-stat-label">Unread</div></div>
+                        <div class="admin-stat-card"><div class="admin-stat-value" id="gmailStatSent">--</div><div class="admin-stat-label">Sent Today</div></div>
+                        <div class="admin-stat-card"><div class="admin-stat-value" id="gmailStatGroups">--</div><div class="admin-stat-label">Contact Groups</div></div>
+                    </div>
+
+                    <!-- Tab Navigation -->
+                    <ul class="nav nav-tabs mb-3" id="gmailTabs">
+                        <li class="nav-item"><a class="nav-link active" href="#" onclick="gmailShowTab('inbox');return false;"><i class="fas fa-inbox me-1"></i> Inbox</a></li>
+                        <li class="nav-item"><a class="nav-link" href="#" onclick="gmailShowTab('compose');return false;"><i class="fas fa-pen me-1"></i> Compose</a></li>
+                        <li class="nav-item"><a class="nav-link" href="#" onclick="gmailShowTab('contacts');return false;"><i class="fas fa-address-book me-1"></i> Contact Groups</a></li>
+                        <li class="nav-item"><a class="nav-link" href="#" onclick="gmailShowTab('search');return false;"><i class="fas fa-search me-1"></i> Search</a></li>
+                    </ul>
+
+                    <!-- INBOX TAB -->
+                    <div id="gmailTabInbox" class="gmail-tab-content">
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+                            <h4><i class="fas fa-inbox me-2"></i>Inbox</h4>
+                            <div style="display:flex;gap:0.5rem;">
+                                <select class="form-control" id="gmailFolderSelect" style="width:auto" onchange="gmailLoadInbox()">
+                                    <option value="INBOX">Inbox</option>
+                                    <option value="[Gmail]/Sent Mail">Sent</option>
+                                    <option value="[Gmail]/Drafts">Drafts</option>
+                                    <option value="[Gmail]/Starred">Starred</option>
+                                    <option value="[Gmail]/Spam">Spam</option>
+                                    <option value="[Gmail]/Trash">Trash</option>
+                                </select>
+                                <button class="admin-secondary" onclick="gmailLoadInbox()"><i class="fas fa-sync-alt"></i> Refresh</button>
+                            </div>
+                        </div>
+                        <div class="admin-table">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th style="width:25%">From</th>
+                                        <th style="width:40%">Subject</th>
+                                        <th style="width:15%">Date</th>
+                                        <th style="width:5%"><i class="fas fa-paperclip"></i></th>
+                                        <th style="width:15%">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="gmailInboxTableBody">
+                                    <tr><td colspan="5" class="text-center text-muted"><i class="fas fa-spinner fa-spin me-2"></i>Loading emails...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div style="display:flex;justify-content:center;gap:0.5rem;margin-top:1rem;" id="gmailPagination"></div>
+                    </div>
+
+                    <!-- COMPOSE TAB -->
+                    <div id="gmailTabCompose" class="gmail-tab-content" style="display:none">
+                        <div class="admin-card" style="border:2px solid var(--gold);">
+                            <h4><i class="fas fa-pen-fancy me-2"></i>Compose Email</h4>
+                            <form id="gmailComposeForm" onsubmit="return gmailSendEmail(event)">
+                                <div class="row g-3">
+                                    <div class="col-12">
+                                        <label class="form-label fw-bold">To *</label>
+                                        <input type="text" class="form-control" id="gmailComposeTo" required placeholder="recipient@email.com (comma-separated for multiple)">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label fw-bold">CC</label>
+                                        <input type="text" class="form-control" id="gmailComposeCc" placeholder="cc@email.com">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label fw-bold">BCC</label>
+                                        <input type="text" class="form-control" id="gmailComposeBcc" placeholder="bcc@email.com">
+                                    </div>
+                                    <div class="col-12">
+                                        <label class="form-label fw-bold">Subject *</label>
+                                        <input type="text" class="form-control" id="gmailComposeSubject" required placeholder="Email subject">
+                                    </div>
+                                    <div class="col-12">
+                                        <label class="form-label fw-bold">Message</label>
+                                        <textarea class="form-control" id="gmailComposeBody" rows="10" placeholder="Write your message here..."></textarea>
+                                    </div>
+                                </div>
+                                <div class="mt-3" style="display:flex;gap:0.5rem;">
+                                    <button type="submit" class="admin-primary"><i class="fas fa-paper-plane me-1"></i> Send Email</button>
+                                    <button type="button" class="admin-secondary" onclick="gmailShowTab('inbox')"><i class="fas fa-times me-1"></i> Cancel</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+
+                    <!-- CONTACT GROUPS TAB -->
+                    <div id="gmailTabContacts" class="gmail-tab-content" style="display:none">
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+                            <h4><i class="fas fa-address-book me-2"></i>Contact Groups</h4>
+                            <button class="admin-primary" onclick="gmailCreateGroupPrompt()"><i class="fas fa-plus me-1"></i> New Group</button>
+                        </div>
+                        <div id="gmailContactGroupsList" class="admin-card-grid">
+                            <div class="text-muted"><i class="fas fa-spinner fa-spin me-2"></i>Loading groups...</div>
+                        </div>
+
+                        <!-- Add Contact Form (hidden) -->
+                        <div id="gmailAddContactForm" style="display:none;margin-top:1.5rem;">
+                            <div class="admin-card" style="border:2px solid var(--gold);">
+                                <h5><i class="fas fa-user-plus me-2"></i>Add Contact to <span id="gmailAddContactGroupName"></span></h5>
+                                <div class="row g-3">
+                                    <div class="col-md-5">
+                                        <input type="text" class="form-control" id="gmailAddContactName" placeholder="Full Name">
+                                    </div>
+                                    <div class="col-md-5">
+                                        <input type="email" class="form-control" id="gmailAddContactEmail" placeholder="email@example.com">
+                                    </div>
+                                    <div class="col-md-2">
+                                        <button class="admin-primary w-100" onclick="gmailAddContactToGroup()"><i class="fas fa-plus"></i> Add</button>
+                                    </div>
+                                </div>
+                                <button class="admin-secondary mt-2" onclick="document.getElementById('gmailAddContactForm').style.display='none'"><i class="fas fa-times me-1"></i> Close</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- SEARCH TAB -->
+                    <div id="gmailTabSearch" class="gmail-tab-content" style="display:none">
+                        <div class="admin-card">
+                            <h4><i class="fas fa-search me-2"></i>Search Emails</h4>
+                            <div class="row g-3">
+                                <div class="col-md-10">
+                                    <input type="text" class="form-control" id="gmailSearchQuery" placeholder="Search by subject, sender, or content..." onkeydown="if(event.key==='Enter')gmailSearchEmails()">
+                                </div>
+                                <div class="col-md-2">
+                                    <button class="admin-primary w-100" onclick="gmailSearchEmails()"><i class="fas fa-search"></i> Search</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div id="gmailSearchResults" style="margin-top:1rem;"></div>
+                    </div>
+
+                    <!-- EMAIL READER MODAL -->
+                    <div id="gmailReaderArea" style="display:none;margin-top:1.5rem;">
+                        <div class="admin-card" style="border-left:4px solid var(--gold);">
+                            <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:1rem;">
+                                <div>
+                                    <h4 id="gmailReaderSubject" style="margin-bottom:0.25rem;"></h4>
+                                    <p class="text-muted mb-1" id="gmailReaderFrom"></p>
+                                    <small class="text-muted" id="gmailReaderDate"></small>
+                                </div>
+                                <div style="display:flex;gap:0.5rem;">
+                                    <button class="admin-secondary" onclick="gmailReplyTo()"><i class="fas fa-reply me-1"></i> Reply</button>
+                                    <button class="admin-secondary" onclick="gmailForwardEmail()"><i class="fas fa-share me-1"></i> Forward</button>
+                                    <button class="admin-secondary" onclick="document.getElementById('gmailReaderArea').style.display='none'"><i class="fas fa-times"></i></button>
+                                </div>
+                            </div>
+                            <hr>
+                            <div id="gmailReaderBody" style="white-space:pre-wrap;line-height:1.6;max-height:500px;overflow-y:auto;"></div>
+                            <div id="gmailReaderAttachments" style="margin-top:1rem;"></div>
+                        </div>
                     </div>
                 </section>
             </main>
@@ -6192,8 +7099,215 @@
                         memberSince: '2020-01-01',
                         expiresOn: '2026-12-31'
                     }
+                },
+                // ===== EC ROLE-SPECIFIC ACCOUNTS =====
+                'ec_events': {
+                    password: 'events123',
+                    member: {
+                        id: 'ec_events_001',
+                        firstName: 'Priya',
+                        lastName: 'Sen',
+                        fullName: 'Priya Sen',
+                        email: 'events@banf.org',
+                        phone: '(904) 555-2001',
+                        role: 'event_coord',
+                        roles: ['member', 'ec_member', 'event_coord'],
+                        adminRole: 'Event Coordinator',
+                        isAdmin: true,
+                        membershipType: 'Family',
+                        memberSince: '2023-01-15',
+                        expiresOn: '2026-12-31',
+                        ecPermissions: ['events', 'rsvps', 'evite', 'volunteers']
+                    }
+                },
+                'ec_sponsorship': {
+                    password: 'sponsor123',
+                    member: {
+                        id: 'ec_sponsor_001',
+                        firstName: 'Amit',
+                        lastName: 'Roy',
+                        fullName: 'Amit Roy',
+                        email: 'sponsor@banf.org',
+                        phone: '(904) 555-2002',
+                        role: 'ec_member',
+                        roles: ['member', 'ec_member'],
+                        adminRole: 'Sponsorship Manager',
+                        isAdmin: true,
+                        membershipType: 'Family',
+                        memberSince: '2022-06-01',
+                        expiresOn: '2026-12-31',
+                        ecPermissions: ['vendors', 'budget']
+                    }
+                },
+                'ec_members': {
+                    password: 'members123',
+                    member: {
+                        id: 'ec_members_001',
+                        firstName: 'Shreya',
+                        lastName: 'Das',
+                        fullName: 'Shreya Das',
+                        email: 'members@banf.org',
+                        phone: '(904) 555-2003',
+                        role: 'secretary',
+                        roles: ['member', 'ec_member', 'secretary'],
+                        adminRole: 'Secretary',
+                        isAdmin: true,
+                        membershipType: 'Individual',
+                        memberSince: '2021-01-01',
+                        expiresOn: '2026-12-31',
+                        ecPermissions: ['members', 'meetings', 'directory']
+                    }
+                },
+                'ec_vendors': {
+                    password: 'vendor123',
+                    member: {
+                        id: 'ec_vendor_001',
+                        firstName: 'Rina',
+                        lastName: 'Mukherjee',
+                        fullName: 'Rina Mukherjee',
+                        email: 'vendors@banf.org',
+                        phone: '(904) 555-2004',
+                        role: 'food_coord',
+                        roles: ['member', 'ec_member', 'food_coord'],
+                        adminRole: 'Food/Vendor Coordinator',
+                        isAdmin: true,
+                        membershipType: 'Family',
+                        memberSince: '2023-06-15',
+                        expiresOn: '2026-12-31',
+                        ecPermissions: ['vendors', 'events']
+                    }
+                },
+                'ec_accounts': {
+                    password: 'accounts123',
+                    member: {
+                        id: 'ec_accounts_001',
+                        firstName: 'Subir',
+                        lastName: 'Ghosh',
+                        fullName: 'Subir Ghosh',
+                        email: 'accounts@banf.org',
+                        phone: '(904) 555-2005',
+                        role: 'treasurer',
+                        roles: ['member', 'ec_member', 'treasurer'],
+                        adminRole: 'Treasurer',
+                        isAdmin: true,
+                        membershipType: 'Family',
+                        memberSince: '2020-01-01',
+                        expiresOn: '2026-12-31',
+                        ecPermissions: ['payments', 'budget', 'vendors']
+                    }
+                },
+                'ec_payments': {
+                    password: 'payment123',
+                    member: {
+                        id: 'ec_payment_001',
+                        firstName: 'Deepa',
+                        lastName: 'Banerjee',
+                        fullName: 'Deepa Banerjee',
+                        email: 'payments@banf.org',
+                        phone: '(904) 555-2006',
+                        role: 'assistant_treasurer',
+                        roles: ['member', 'ec_member', 'assistant_treasurer'],
+                        adminRole: 'Asst. Treasurer',
+                        isAdmin: true,
+                        membershipType: 'Couple',
+                        memberSince: '2022-01-01',
+                        expiresOn: '2026-12-31',
+                        ecPermissions: ['payments']
+                    }
+                },
+                'ec_comms': {
+                    password: 'comms123',
+                    member: {
+                        id: 'ec_comms_001',
+                        firstName: 'Tanmay',
+                        lastName: 'Chatterjee',
+                        fullName: 'Tanmay Chatterjee',
+                        email: 'comms@banf.org',
+                        phone: '(904) 555-2007',
+                        role: 'communications',
+                        roles: ['member', 'ec_member', 'communications'],
+                        adminRole: 'Communications',
+                        isAdmin: true,
+                        membershipType: 'Family',
+                        memberSince: '2023-03-01',
+                        expiresOn: '2026-12-31',
+                        ecPermissions: ['announcements', 'surveys', 'complaints', 'magazine']
+                    }
+                },
+                'ec_ads': {
+                    password: 'ads123',
+                    member: {
+                        id: 'ec_ads_001',
+                        firstName: 'Mousumi',
+                        lastName: 'Basu',
+                        fullName: 'Mousumi Basu',
+                        email: 'ads@banf.org',
+                        phone: '(904) 555-2008',
+                        role: 'ec_member',
+                        roles: ['member', 'ec_member'],
+                        adminRole: 'Ad Manager',
+                        isAdmin: true,
+                        membershipType: 'Individual',
+                        memberSince: '2024-01-01',
+                        expiresOn: '2026-12-31',
+                        ecPermissions: ['vendors', 'announcements']
+                    }
                 }
             },
+            // ===== EVITE / INVITATION DATA =====
+            eviteData: {
+                invitations: [
+                    {
+                        id: 'EVT-2026-001',
+                        eventName: 'Nabo Borsho 1433',
+                        eventDate: '2026-04-25',
+                        eventTime: '5:00 PM - 10:00 PM',
+                        venue: 'Jacksonville Civic Center',
+                        sentDate: '2026-03-15',
+                        sentBy: 'ec_events',
+                        totalSent: 156,
+                        responses: [
+                            { memberId: 'demo_001', name: 'Test Member', status: 'attending', adults: 2, kids: 1, dietary: 'Vegetarian', notes: 'Need high chair', respondedAt: '2026-03-16' },
+                            { memberId: 'BANF-2024-001', name: 'Rajib Das', status: 'attending', adults: 2, kids: 2, dietary: 'None', notes: '', respondedAt: '2026-03-17' },
+                            { memberId: 'BANF-2024-002', name: 'Anita Sharma', status: 'attending', adults: 1, kids: 0, dietary: 'Vegan', notes: 'Gluten-free needed', respondedAt: '2026-03-17' },
+                            { memberId: 'BANF-2024-003', name: 'Suman Pal', status: 'not_attending', adults: 0, kids: 0, dietary: '', notes: 'Out of town', respondedAt: '2026-03-18' },
+                            { memberId: 'BANF-2024-004', name: 'Ritu Dey', status: 'attending', adults: 3, kids: 1, dietary: 'Halal', notes: '', respondedAt: '2026-03-19' },
+                            { memberId: 'BANF-2024-005', name: 'Kamal Bose', status: 'maybe', adults: 2, kids: 0, dietary: 'None', notes: 'Will confirm later', respondedAt: '2026-03-20' },
+                            { memberId: 'BANF-2024-006', name: 'Priti Guha', status: 'attending', adults: 2, kids: 3, dietary: 'Vegetarian, Nut-free', notes: 'Peanut allergy', respondedAt: '2026-03-20' }
+                        ]
+                    },
+                    {
+                        id: 'EVT-2026-002',
+                        eventName: 'Summer Camp 2026',
+                        eventDate: '2026-06-15',
+                        eventTime: '9:00 AM - 5:00 PM',
+                        venue: 'Hanna Park',
+                        sentDate: '2026-05-01',
+                        sentBy: 'ec_events',
+                        totalSent: 80,
+                        responses: [
+                            { memberId: 'demo_001', name: 'Test Member', status: 'attending', adults: 1, kids: 2, dietary: 'None', notes: 'Bringing board games', respondedAt: '2026-05-02' },
+                            { memberId: 'BANF-2024-002', name: 'Anita Sharma', status: 'attending', adults: 1, kids: 0, dietary: 'Vegan', notes: '', respondedAt: '2026-05-03' }
+                        ]
+                    }
+                ],
+                templates: [
+                    { id: 'TPL-001', name: 'Cultural Event', subject: '🪷 You\'re Invited to {eventName}!', body: 'Dear {memberName},\n\nYou are cordially invited to {eventName} on {eventDate}.\n\nVenue: {venue}\nTime: {eventTime}\n\nPlease RSVP by clicking the link below.\n\nজয় বাংলা!\nBANF Executive Committee' },
+                    { id: 'TPL-002', name: 'Meeting', subject: '📋 BANF Meeting Invitation: {eventName}', body: 'Dear {memberName},\n\nPlease join us for {eventName} on {eventDate}.\n\nAgenda will be shared prior to the meeting.\n\nRegards,\nBANF EC' },
+                    { id: 'TPL-003', name: 'Picnic/Outing', subject: '🌳 BANF {eventName} - Save the Date!', body: 'Dear {memberName},\n\nJoin us for a fun day out at {eventName}!\n\nDate: {eventDate}\nLocation: {venue}\nTime: {eventTime}\n\nPlease bring your family and friends!\n\nBANF Team' }
+                ]
+            },
+            // ===== MEMBER DIRECTORY DATA =====
+            memberDirectory: [
+                { id: 'BANF-2024-001', firstName: 'Rajib', lastName: 'Das', email: 'rajib.das@email.com', phone: '(904) 555-1001', type: 'Family', status: 'Active', joinDate: '2024-01-15' },
+                { id: 'BANF-2024-002', firstName: 'Anita', lastName: 'Sharma', email: 'anita.sharma@email.com', phone: '(904) 555-1002', type: 'Individual', status: 'Active', joinDate: '2024-02-20' },
+                { id: 'BANF-2024-003', firstName: 'Suman', lastName: 'Pal', email: 'suman.pal@email.com', phone: '(904) 555-1003', type: 'Family', status: 'Active', joinDate: '2024-03-10' },
+                { id: 'BANF-2024-004', firstName: 'Ritu', lastName: 'Dey', email: 'ritu.dey@email.com', phone: '(904) 555-1004', type: 'Family', status: 'Active', joinDate: '2024-04-05' },
+                { id: 'BANF-2024-005', firstName: 'Kamal', lastName: 'Bose', email: 'kamal.bose@email.com', phone: '(904) 555-1005', type: 'Couple', status: 'Active', joinDate: '2024-05-12' },
+                { id: 'BANF-2024-006', firstName: 'Priti', lastName: 'Guha', email: 'priti.guha@email.com', phone: '(904) 555-1006', type: 'Family', status: 'Active', joinDate: '2024-06-01' },
+                { id: 'BANF-2024-007', firstName: 'Arjun', lastName: 'Mitra', email: 'arjun.mitra@email.com', phone: '(904) 555-1007', type: 'Student', status: 'Active', joinDate: '2024-07-20' },
+                { id: 'BANF-2024-008', firstName: 'Laboni', lastName: 'Dutta', email: 'laboni.dutta@email.com', phone: '(904) 555-1008', type: 'Family', status: 'Expired', joinDate: '2023-01-01' }
+            ],
             // Demo registration data
             pendingRegistrations: {},
             registrationCodeCounter: 100000
@@ -6309,6 +7423,103 @@
             if (clickedNav) {
                 clickedNav.classList.add('active');
             }
+
+            // Auto-render content for specific sections
+            if (sectionId === 'events') renderMyRsvps();
+        }
+
+        /* ================================================================
+         *  MEMBER RSVP FUNCTIONS
+         * ================================================================ */
+
+        let memberRsvps = []; // Track member's RSVPs
+
+        function openMemberRsvp(eventId, eventName) {
+            document.getElementById('memberRsvpFormContainer').style.display = 'block';
+            document.getElementById('rsvpFormTitle').textContent = 'RSVP — ' + eventName;
+            document.getElementById('rsvpEventId').value = eventId;
+            document.getElementById('rsvpStatus').value = '';
+            document.getElementById('rsvpAdults').value = 1;
+            document.getElementById('rsvpKids').value = 0;
+            document.getElementById('rsvpDietary').value = 'None';
+            document.getElementById('rsvpNotes').value = '';
+            document.getElementById('memberRsvpFormContainer').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        function toggleRsvpDetails() {
+            const status = document.getElementById('rsvpStatus').value;
+            const show = (status === 'attending' || status === 'maybe');
+            document.getElementById('rsvpDietaryCol').style.display = show ? '' : 'none';
+        }
+
+        function handleMemberRsvp(e) {
+            e.preventDefault();
+            const eventId = document.getElementById('rsvpEventId').value;
+            const status = document.getElementById('rsvpStatus').value;
+            const adults = parseInt(document.getElementById('rsvpAdults').value) || 0;
+            const kids = parseInt(document.getElementById('rsvpKids').value) || 0;
+            const dietary = document.getElementById('rsvpDietary').value;
+            const notes = document.getElementById('rsvpNotes').value;
+
+            const memberName = MemberPortal.member ? MemberPortal.member.name : 'Demo Member';
+
+            // Find the invitation and add/update response
+            const inv = DemoData.eviteData.invitations.find(i => i.id === eventId);
+            if (inv) {
+                const existingIdx = inv.responses.findIndex(r => r.name === memberName);
+                const response = {
+                    memberId: MemberPortal.member ? MemberPortal.member.id : 'DEMO',
+                    name: memberName,
+                    status: status,
+                    adults: status === 'attending' ? adults : 0,
+                    kids: status === 'attending' ? kids : 0,
+                    dietary: status === 'attending' ? dietary : '',
+                    notes: notes,
+                    respondedAt: new Date().toISOString().split('T')[0]
+                };
+                if (existingIdx >= 0) {
+                    inv.responses[existingIdx] = response;
+                } else {
+                    inv.responses.push(response);
+                }
+            }
+
+            // Track in local array
+            const localIdx = memberRsvps.findIndex(r => r.eventId === eventId);
+            const rsvpRecord = { eventId, eventName: inv ? inv.eventName : eventId, status, adults, kids, dietary, notes };
+            if (localIdx >= 0) memberRsvps[localIdx] = rsvpRecord;
+            else memberRsvps.push(rsvpRecord);
+
+            document.getElementById('memberRsvpFormContainer').style.display = 'none';
+            renderMyRsvps();
+
+            const statusEmoji = { attending: '✅', maybe: '🤔', not_attending: '❌' };
+            alert(`${statusEmoji[status] || ''} RSVP submitted!\n\nEvent: ${inv ? inv.eventName : eventId}\nStatus: ${status}\nAdults: ${adults} • Kids: ${kids}\nDietary: ${dietary}`);
+            return false;
+        }
+
+        function renderMyRsvps() {
+            const tbody = document.getElementById('myRsvpTableBody');
+            if (!tbody) return;
+
+            if (memberRsvps.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="text-center py-3 text-muted">No RSVPs yet. RSVP to an event above!</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = memberRsvps.map(r => {
+                const statusBadge = r.status === 'attending' ? '<span class="status-badge active">✅ Attending</span>'
+                    : r.status === 'maybe' ? '<span class="status-badge pending">🤔 Maybe</span>'
+                    : '<span class="status-badge inactive">❌ Declined</span>';
+                return `<tr>
+                    <td>${r.eventName}</td>
+                    <td>${statusBadge}</td>
+                    <td>${r.adults}</td>
+                    <td>${r.kids}</td>
+                    <td>${r.dietary || '-'}</td>
+                    <td><button class="portal-feature-btn secondary" style="padding:0.25rem 0.75rem; font-size:0.8rem;" onclick="openMemberRsvp('${r.eventId}', '${r.eventName}')"><i class="fas fa-edit"></i> Edit</button></td>
+                </tr>`;
+            }).join('');
         }
         
         /**
@@ -6395,6 +7606,691 @@
             closeAdminPortal();
         }
 
+        /* ================================================================
+         *  EVITE / INVITATION MANAGEMENT FUNCTIONS
+         * ================================================================ */
+
+        function openSendEviteForm() {
+            document.getElementById('sendEviteFormContainer').style.display = 'block';
+            document.getElementById('sendEviteForm').reset();
+        }
+
+        function applyEviteTemplate() {
+            const tplId = document.getElementById('eviteTemplate').value;
+            if (!tplId) return;
+            const tpl = DemoData.eviteData.templates.find(t => t.id === tplId);
+            if (!tpl) return;
+            document.getElementById('eviteSubject').value = tpl.subject;
+            document.getElementById('eviteMessage').value = tpl.body;
+        }
+
+        function handleSendEvite(e) {
+            e.preventDefault();
+            const eventName = document.getElementById('eviteEventName').value;
+            const date = document.getElementById('eviteDate').value;
+            const venue = document.getElementById('eviteVenue').value || 'TBD';
+            const recipients = document.getElementById('eviteRecipients').value;
+            const subject = document.getElementById('eviteSubject').value;
+            const message = document.getElementById('eviteMessage').value;
+
+            const recipientCount = { all: 156, active: 148, family: 92, ec: 10 }[recipients] || 156;
+
+            // Create new invitation record
+            const newInvite = {
+                id: 'EVT-' + String(DemoData.eviteData.invitations.length + 1).padStart(3, '0'),
+                eventName: eventName,
+                eventDate: date,
+                venue: venue,
+                sentDate: new Date().toISOString().split('T')[0],
+                sentTo: recipientCount,
+                sentBy: AdminPortal.admin ? AdminPortal.admin.name : 'Admin',
+                subject: subject,
+                collectDietary: document.getElementById('eviteCollectDietary').checked,
+                collectKids: document.getElementById('eviteCollectKids').checked,
+                responses: []
+            };
+
+            DemoData.eviteData.invitations.push(newInvite);
+            document.getElementById('sendEviteFormContainer').style.display = 'none';
+            renderEviteHistory();
+
+            // === SEND REAL EMAIL VIA GMAIL BACKEND ===
+            (async function sendRealEviteEmail() {
+                try {
+                    // Build recipient list from member directory (use test email for now)
+                    const testRecipient = 'ranadhir.ghosh@gmail.com';
+                    let recipientEmails = [testRecipient];
+
+                    // In production, gather all member emails from DemoData.memberDirectory
+                    // For now we use the test recipient
+                    const time = document.getElementById('eviteTime') ? document.getElementById('eviteTime').value : '';
+
+                    const evitePayload = {
+                        recipients: recipientEmails.map(em => ({ name: em.split('@')[0], email: em })),
+                        event_name: eventName,
+                        event_date: date,
+                        event_time: time || '6:00 PM',
+                        venue: venue,
+                        message: message || subject,
+                        rsvp_deadline: date
+                    };
+
+                    const r = await apiFetch('/send-evite', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(evitePayload)
+                    });
+                    const d = await r.json();
+                    if (d.success) {
+                        alert(`✅ Evite sent successfully!\n\n📧 Real email delivered via Gmail!\nEvent: ${eventName}\nRecipients: ${recipientEmails.join(', ')}\nDate: ${date}\n\nSent ${d.sent_count} email(s) from banfjax@gmail.com`);
+                    } else {
+                        alert(`⚠️ Evite recorded but email delivery failed:\n${d.error || 'Unknown error'}\n\nNote: The evite was saved locally. Fix Gmail connection to resend.`);
+                    }
+                } catch(emailErr) {
+                    console.error('Gmail send error:', emailErr);
+                    alert(`✅ Evite recorded locally!\n\n⚠️ Could not send real email (Gmail service may be offline).\nEvent: ${eventName}\nRecipients: ${recipientCount} members\nDate: ${date}`);
+                }
+            })();
+
+            return false;
+        }
+
+        function previewEvite() {
+            const eventName = document.getElementById('eviteEventName').value || 'Event Name';
+            const date = document.getElementById('eviteDate').value || 'TBD';
+            const venue = document.getElementById('eviteVenue').value || 'TBD';
+            const time = document.getElementById('eviteTime').value || '';
+            const subject = document.getElementById('eviteSubject').value || 'You\'re invited!';
+            let message = document.getElementById('eviteMessage').value || 'Please join us for this wonderful event.';
+
+            message = message.replace(/{eventName}/g, eventName)
+                           .replace(/{eventDate}/g, date)
+                           .replace(/{venue}/g, venue)
+                           .replace(/{eventTime}/g, time)
+                           .replace(/{memberName}/g, 'Dear Member');
+
+            alert(`📧 EVITE PREVIEW\n\nSubject: ${subject}\n\n${message}\n\n📍 Venue: ${venue}\n📅 Date: ${date}\n🕐 Time: ${time}`);
+        }
+
+        function renderEviteHistory() {
+            const container = document.getElementById('eviteHistoryList');
+            if (!container) return;
+            const invitations = DemoData.eviteData.invitations;
+
+            container.innerHTML = invitations.map(inv => {
+                const attending = inv.responses.filter(r => r.status === 'attending').length;
+                const maybe = inv.responses.filter(r => r.status === 'maybe').length;
+                const declined = inv.responses.filter(r => r.status === 'not_attending').length;
+                const totalAdults = inv.responses.filter(r => r.status === 'attending').reduce((s, r) => s + (r.adults || 0), 0);
+                const totalKids = inv.responses.filter(r => r.status === 'attending').reduce((s, r) => s + (r.kids || 0), 0);
+                const responseRate = inv.sentTo > 0 ? Math.round((inv.responses.length / inv.sentTo) * 100) : 0;
+
+                return `
+                    <div class="admin-card">
+                        <div class="admin-card-header">
+                            <div class="admin-card-icon"><i class="fas fa-envelope"></i></div>
+                            <div>
+                                <h4>${inv.eventName}</h4>
+                                <small>Sent: ${inv.sentDate} • ${inv.sentTo} recipients</small>
+                            </div>
+                        </div>
+                        <div style="display:flex; gap:1rem; flex-wrap:wrap; margin: 0.5rem 0;">
+                            <span class="status-badge active">✅ ${attending} Attending</span>
+                            <span class="status-badge pending">🤔 ${maybe} Maybe</span>
+                            <span class="status-badge inactive">❌ ${declined} Declined</span>
+                        </div>
+                        <p style="margin:0.5rem 0;">
+                            <strong>Response Rate:</strong> ${responseRate}% (${inv.responses.length}/${inv.sentTo})<br>
+                            <strong>Expected Headcount:</strong> ${totalAdults} adults, ${totalKids} kids
+                        </p>
+                        <div class="admin-actions">
+                            <button class="admin-primary" onclick="showEviteReport('${inv.id}')"><i class="fas fa-chart-bar me-1"></i> Report</button>
+                            <button class="admin-secondary" onclick="sendEviteReminder('${inv.id}')"><i class="fas fa-bell me-1"></i> Remind</button>
+                        </div>
+                    </div>`;
+            }).join('');
+        }
+
+        function showEviteReport(inviteId) {
+            const inv = DemoData.eviteData.invitations.find(i => i.id === inviteId);
+            if (!inv) return;
+
+            const reportArea = document.getElementById('eviteReportArea');
+            reportArea.style.display = 'block';
+            document.getElementById('eviteReportTitle').innerHTML = `<i class="fas fa-chart-bar me-2"></i>RSVP Report — ${inv.eventName}`;
+
+            const attending = inv.responses.filter(r => r.status === 'attending');
+            const maybe = inv.responses.filter(r => r.status === 'maybe');
+            const declined = inv.responses.filter(r => r.status === 'not_attending');
+            const totalAdults = attending.reduce((s, r) => s + (r.adults || 0), 0);
+            const totalKids = attending.reduce((s, r) => s + (r.kids || 0), 0);
+
+            // Stats
+            document.getElementById('eviteReportStats').innerHTML = `
+                <div class="admin-stat-card"><div class="admin-stat-value">${inv.responses.length}</div><div class="admin-stat-label">Total Responses</div></div>
+                <div class="admin-stat-card"><div class="admin-stat-value" style="color:#4CAF50">${attending.length}</div><div class="admin-stat-label">Attending</div></div>
+                <div class="admin-stat-card"><div class="admin-stat-value" style="color:#FF9800">${maybe.length}</div><div class="admin-stat-label">Maybe</div></div>
+                <div class="admin-stat-card"><div class="admin-stat-value" style="color:#f44336">${declined.length}</div><div class="admin-stat-label">Declined</div></div>
+                <div class="admin-stat-card"><div class="admin-stat-value">${totalAdults}</div><div class="admin-stat-label">Total Adults</div></div>
+                <div class="admin-stat-card"><div class="admin-stat-value">${totalKids}</div><div class="admin-stat-label">Total Kids</div></div>
+            `;
+
+            // Dietary summary
+            const dietaryCounts = {};
+            attending.forEach(r => {
+                const d = r.dietary || 'Not specified';
+                dietaryCounts[d] = (dietaryCounts[d] || 0) + (r.adults || 0);
+            });
+            document.getElementById('eviteReportDietary').innerHTML = `
+                <h5><i class="fas fa-utensils me-2"></i>Dietary Summary</h5>
+                <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+                    ${Object.entries(dietaryCounts).map(([diet, count]) =>
+                        `<span class="status-badge active">${diet}: ${count} adults</span>`
+                    ).join('')}
+                </div>`;
+
+            // Response table
+            document.getElementById('eviteReportTableBody').innerHTML = inv.responses.map(r => `
+                <tr>
+                    <td>${r.name}</td>
+                    <td><span class="status-badge ${r.status === 'attending' ? 'active' : r.status === 'maybe' ? 'pending' : 'inactive'}">${r.status === 'attending' ? '✅ Attending' : r.status === 'maybe' ? '🤔 Maybe' : '❌ Declined'}</span></td>
+                    <td>${r.adults || '-'}</td>
+                    <td>${r.kids || '-'}</td>
+                    <td>${r.dietary || '-'}</td>
+                    <td>${r.notes || '-'}</td>
+                    <td>${r.respondedAt || '-'}</td>
+                </tr>
+            `).join('');
+        }
+
+        function sendEviteReminder(inviteId) {
+            const inv = DemoData.eviteData.invitations.find(i => i.id === inviteId);
+            if (!inv) return;
+            const noResponse = inv.sentTo - inv.responses.length;
+            alert(`📬 Reminder sent!\n\nEvent: ${inv.eventName}\nSent to: ${noResponse} members who haven't responded yet.`);
+        }
+
+        function exportEviteReport() {
+            let csv = 'Event,Member,Status,Adults,Kids,Dietary,Notes,Responded\n';
+            DemoData.eviteData.invitations.forEach(inv => {
+                inv.responses.forEach(r => {
+                    csv += `"${inv.eventName}","${r.name}","${r.status}",${r.adults || 0},${r.kids || 0},"${r.dietary || ''}","${r.notes || ''}","${r.respondedAt || ''}"\n`;
+                });
+            });
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url; a.download = 'evite_rsvp_report.csv'; a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        function renderRsvpDashboard() {
+            const statsEl = document.getElementById('rsvpSummaryStats');
+            const tbody = document.getElementById('rsvpTableBody');
+            if (!statsEl || !tbody) return;
+
+            let totalAttending = 0, totalMaybe = 0, totalDeclined = 0, totalAdults = 0, totalKids = 0;
+            const allRows = [];
+
+            DemoData.eviteData.invitations.forEach(inv => {
+                inv.responses.forEach(r => {
+                    if (r.status === 'attending') { totalAttending++; totalAdults += (r.adults || 0); totalKids += (r.kids || 0); }
+                    else if (r.status === 'maybe') totalMaybe++;
+                    else totalDeclined++;
+                    allRows.push({ event: inv.eventName, ...r });
+                });
+            });
+
+            statsEl.innerHTML = `
+                <div class="admin-stat-card"><div class="admin-stat-value" style="color:#4CAF50">${totalAttending}</div><div class="admin-stat-label">Attending</div></div>
+                <div class="admin-stat-card"><div class="admin-stat-value" style="color:#FF9800">${totalMaybe}</div><div class="admin-stat-label">Maybe</div></div>
+                <div class="admin-stat-card"><div class="admin-stat-value">${totalAdults + totalKids}</div><div class="admin-stat-label">Total Headcount</div></div>
+                <div class="admin-stat-card"><div class="admin-stat-value">${totalAdults}</div><div class="admin-stat-label">Adults</div></div>
+                <div class="admin-stat-card"><div class="admin-stat-value">${totalKids}</div><div class="admin-stat-label">Kids</div></div>
+            `;
+
+            tbody.innerHTML = allRows.map(r => `
+                <tr>
+                    <td>${r.event}</td>
+                    <td>${r.name}</td>
+                    <td><span class="status-badge ${r.status === 'attending' ? 'active' : r.status === 'maybe' ? 'pending' : 'inactive'}">${r.status === 'attending' ? '✅ Attending' : r.status === 'maybe' ? '🤔 Maybe' : '❌ Declined'}</span></td>
+                    <td>${r.adults || '-'}</td>
+                    <td>${r.kids || '-'}</td>
+                    <td>${r.dietary || '-'}</td>
+                    <td>${r.notes || '-'}</td>
+                    <td><button class="admin-secondary" onclick="alert('✅ ${r.name} checked in!')">Check-in</button></td>
+                </tr>
+            `).join('');
+        }
+
+        /* ================================================================
+         *  EXCEL / CSV IMPORT FUNCTIONS
+         * ================================================================ */
+
+        let pendingImportData = { type: '', rows: [], headers: [] };
+
+        function handleExcelUpload(type, inputEl) {
+            const file = inputEl.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const text = e.target.result;
+                const ext = file.name.split('.').pop().toLowerCase();
+
+                if (ext === 'csv') {
+                    parseCSVData(text, type, file.name);
+                } else {
+                    // For .xlsx/.xls files, we parse as CSV (simplified for demo)
+                    alert('📊 For this demo, please use CSV format.\nUse the "Download Template" button to get a pre-formatted CSV.');
+                    inputEl.value = '';
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        function parseCSVData(csvText, type, fileName) {
+            const lines = csvText.split('\n').filter(l => l.trim());
+            if (lines.length < 2) { alert('❌ File is empty or has no data rows.'); return; }
+
+            const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
+            const rows = [];
+            for (let i = 1; i < lines.length; i++) {
+                const vals = lines[i].split(',').map(v => v.trim().replace(/"/g, ''));
+                if (vals.length === headers.length) {
+                    const row = {};
+                    headers.forEach((h, idx) => row[h] = vals[idx]);
+                    rows.push(row);
+                }
+            }
+
+            if (rows.length === 0) { alert('❌ No valid data rows found.'); return; }
+
+            pendingImportData = { type, rows, headers };
+            showImportPreview(type, headers, rows, fileName);
+        }
+
+        function showImportPreview(type, headers, rows, fileName) {
+            const area = document.getElementById('importPreviewArea');
+            area.style.display = 'block';
+            document.getElementById('importPreviewTitle').innerHTML = `<i class="fas fa-table me-2"></i>Preview: ${fileName} (${rows.length} rows)`;
+
+            document.getElementById('importPreviewStats').innerHTML = `
+                <span class="status-badge active"><i class="fas fa-columns me-1"></i>${headers.length} columns</span>
+                <span class="status-badge active"><i class="fas fa-rows me-1"></i>${rows.length} rows</span>
+                <span class="status-badge pending"><i class="fas fa-tag me-1"></i>Type: ${type}</span>
+            `;
+
+            document.getElementById('importPreviewHead').innerHTML = `<tr>${headers.map(h => `<th>${h}</th>`).join('')}<th>Valid</th></tr>`;
+            document.getElementById('importPreviewBody').innerHTML = rows.slice(0, 20).map(row => {
+                const cells = headers.map(h => `<td>${row[h] || ''}</td>`).join('');
+                return `<tr>${cells}<td><span class="status-badge active">✓</span></td></tr>`;
+            }).join('') + (rows.length > 20 ? `<tr><td colspan="${headers.length + 1}" style="text-align:center;color:#666;">... and ${rows.length - 20} more rows</td></tr>` : '');
+        }
+
+        function confirmImport() {
+            const { type, rows } = pendingImportData;
+            if (!rows.length) return;
+
+            if (type === 'members') {
+                rows.forEach(row => {
+                    DemoData.memberDirectory.push({
+                        id: 'MEM-' + String(DemoData.memberDirectory.length + 1).padStart(3, '0'),
+                        firstName: row['First Name'] || row['FirstName'] || '',
+                        lastName: row['Last Name'] || row['LastName'] || '',
+                        email: row['Email'] || '',
+                        phone: row['Phone'] || '',
+                        membershipType: row['Membership Type'] || row['Type'] || 'Individual',
+                        status: 'Active',
+                        joinDate: new Date().toISOString().split('T')[0]
+                    });
+                });
+            }
+
+            // Add import history
+            const historyBody = document.getElementById('importHistoryBody');
+            if (historyBody) {
+                const newRow = document.createElement('tr');
+                newRow.innerHTML = `
+                    <td>${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</td>
+                    <td>${type.charAt(0).toUpperCase() + type.slice(1)}</td>
+                    <td>${rows.length} records</td>
+                    <td><span class="status-badge active">Success</span></td>
+                    <td>${AdminPortal.admin ? AdminPortal.admin.name : 'Admin'}</td>
+                `;
+                historyBody.insertBefore(newRow, historyBody.firstChild);
+            }
+
+            document.getElementById('importPreviewArea').style.display = 'none';
+            alert(`✅ Import Successful!\n\n${rows.length} ${type} records imported successfully.`);
+            pendingImportData = { type: '', rows: [], headers: [] };
+        }
+
+        function downloadTemplate(type) {
+            let csv = '';
+            if (type === 'members') {
+                csv = 'First Name,Last Name,Email,Phone,Membership Type\nJohn,Doe,john@example.com,555-0101,Family\nJane,Smith,jane@example.com,555-0102,Individual\n';
+            } else if (type === 'events') {
+                csv = 'Event Name,Date,Time,Venue,Description\nSample Event,2026-06-01,5:00 PM,Community Center,Annual celebration\n';
+            } else if (type === 'payments') {
+                csv = 'Member Name,Amount,Date,Type,Status\nJohn Doe,100,2026-01-15,Annual Dues,Completed\n';
+            }
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url; a.download = `banf_${type}_template.csv`; a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        /* ================================================================
+         *  GMAIL / EMAIL MANAGEMENT FUNCTIONS
+         * ================================================================ */
+
+        let gmailState = { connected: false, currentPage: 1, perPage: 15, currentEmail: null, contactGroups: {} };
+
+        async function gmailCheckConnection() {
+            const icon = document.getElementById('gmailStatusIcon');
+            const text = document.getElementById('gmailStatusText');
+            const detail = document.getElementById('gmailStatusDetail');
+            const bar = document.getElementById('gmailConnectionStatus');
+            icon.style.color = '#ff9800'; text.textContent = 'Connecting...'; detail.textContent = IS_PRODUCTION ? 'Connecting to BANF Email Service...' : 'Verifying Gmail IMAP/SMTP access...';
+            try {
+                const r = await apiFetch('/status');
+                const d = await r.json();
+                if (d.status === 'connected') {
+                    icon.style.color = '#4CAF50'; text.textContent = '✅ Connected to BANF Email Service';
+                    detail.textContent = IS_PRODUCTION ? `Service: ${d.service_type || 'Wix'} | Sent Today: ${d.sent_today || 0}` : `IMAP: ${d.imap ? 'OK' : 'FAIL'} | SMTP: ${d.smtp ? 'OK' : 'FAIL'}`;
+                    bar.style.borderLeftColor = '#4CAF50'; gmailState.connected = true;
+                    gmailLoadUnreadCount();
+                } else {
+                    icon.style.color = '#f44336'; text.textContent = '❌ Connection Failed';
+                    detail.textContent = d.error || (IS_PRODUCTION ? 'Email service temporarily unavailable' : 'Check Gmail service is running on port 5001'); bar.style.borderLeftColor = '#f44336';
+                }
+            } catch(e) {
+                icon.style.color = '#f44336'; text.textContent = '❌ Email Service Unreachable';
+                detail.textContent = IS_PRODUCTION ? 'Email service temporarily unavailable. Please try again later.' : 'Start gmail_service.py (python gmail_service.py) on port 5001'; bar.style.borderLeftColor = '#f44336';
+            }
+        }
+
+        async function gmailLoadUnreadCount() {
+            try {
+                const r = await apiFetch('/unread'); const d = await r.json();
+                const badge = document.getElementById('gmailUnreadBadge');
+                const stat = document.getElementById('gmailStatUnread');
+                if (d.unread_count > 0) { badge.style.display = 'inline-block'; badge.textContent = d.unread_count; }
+                else { badge.style.display = 'none'; }
+                stat.textContent = d.unread_count || 0;
+            } catch(e) { console.log('Gmail unread check failed'); }
+        }
+
+        function gmailShowTab(tab) {
+            ['inbox','compose','contacts','search'].forEach(t => {
+                const el = document.getElementById('gmailTab' + t.charAt(0).toUpperCase() + t.slice(1));
+                if (el) el.style.display = (t === tab) ? 'block' : 'none';
+            });
+            document.querySelectorAll('#gmailTabs .nav-link').forEach(a => a.classList.remove('active'));
+            event.target.classList.add('active');
+            if (tab === 'inbox') gmailLoadInbox();
+            if (tab === 'contacts') gmailLoadContactGroups();
+        }
+
+        function gmailOpenCompose(to, subject, body) {
+            gmailShowTab('compose');
+            document.querySelectorAll('#gmailTabs .nav-link').forEach(a => a.classList.remove('active'));
+            document.querySelectorAll('#gmailTabs .nav-link')[1].classList.add('active');
+            if (to) document.getElementById('gmailComposeTo').value = to;
+            if (subject) document.getElementById('gmailComposeSubject').value = subject;
+            if (body) document.getElementById('gmailComposeBody').value = body;
+        }
+
+        async function gmailLoadInbox() {
+            const tbody = document.getElementById('gmailInboxTableBody');
+            const folder = document.getElementById('gmailFolderSelect').value;
+            tbody.innerHTML = '<tr><td colspan="5" class="text-center"><i class="fas fa-spinner fa-spin me-2"></i>Loading...</td></tr>';
+            try {
+                const r = await apiFetch(`/inbox?page=${gmailState.currentPage}&per_page=${gmailState.perPage}&folder=${encodeURIComponent(folder)}`);
+                const d = await r.json();
+                if (!d.emails || d.emails.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">No emails found</td></tr>';
+                    document.getElementById('gmailStatInbox').textContent = '0'; return;
+                }
+                document.getElementById('gmailStatInbox').textContent = d.total || d.emails.length;
+                tbody.innerHTML = d.emails.map(em => {
+                    const unread = !em.seen;
+                    const fw = unread ? 'fw-bold' : '';
+                    const bg = unread ? 'background:#fff8e1;' : '';
+                    const fromShort = (em.from || 'Unknown').replace(/<.*>/,'').trim().substring(0,30);
+                    const subjShort = (em.subject || '(no subject)').substring(0,60);
+                    const dateShort = em.date ? new Date(em.date).toLocaleDateString() : '';
+                    return `<tr style="${bg}" onclick="gmailViewEmail('${em.id}','${encodeURIComponent(folder)}')" class="cursor-pointer">
+                        <td class="${fw}">${escapeHtml(fromShort)}</td>
+                        <td class="${fw}">${escapeHtml(subjShort)}</td>
+                        <td>${dateShort}</td>
+                        <td>${em.has_attachments ? '<i class="fas fa-paperclip text-muted"></i>' : ''}</td>
+                        <td>
+                            <button class="btn btn-sm btn-outline-primary" onclick="event.stopPropagation();gmailReplyToId('${em.id}','${encodeURIComponent(folder)}')"><i class="fas fa-reply"></i></button>
+                            <button class="btn btn-sm btn-outline-danger" onclick="event.stopPropagation();gmailDeleteEmail('${em.id}','${encodeURIComponent(folder)}')"><i class="fas fa-trash"></i></button>
+                        </td></tr>`;
+                }).join('');
+                // Pagination
+                const totalPages = Math.ceil((d.total || d.emails.length) / gmailState.perPage);
+                const pag = document.getElementById('gmailPagination');
+                pag.innerHTML = '';
+                if (totalPages > 1) {
+                    for (let p = 1; p <= Math.min(totalPages, 10); p++) {
+                        pag.innerHTML += `<button class="btn btn-sm ${p===gmailState.currentPage?'btn-primary':'btn-outline-secondary'}" onclick="gmailState.currentPage=${p};gmailLoadInbox()">${p}</button>`;
+                    }
+                }
+            } catch(e) {
+                tbody.innerHTML = `<tr><td colspan="5" class="text-center text-danger">❌ Failed to load: ${e.message}<br><small>${IS_PRODUCTION ? 'Email service temporarily unavailable' : 'Ensure gmail_service.py is running'}</small></td></tr>`;
+            }
+        }
+
+        async function gmailViewEmail(emailId, folder) {
+            document.getElementById('gmailReaderArea').style.display = 'block';
+            document.getElementById('gmailReaderBody').innerHTML = '<i class="fas fa-spinner fa-spin"></i> Loading...';
+            try {
+                const r = await apiFetch(`/email/${emailId}?folder=${folder || 'INBOX'}`);
+                const em = await r.json();
+                gmailState.currentEmail = em;
+                document.getElementById('gmailReaderSubject').textContent = em.subject || '(no subject)';
+                document.getElementById('gmailReaderFrom').textContent = `From: ${em.from || 'Unknown'}`;
+                document.getElementById('gmailReaderDate').textContent = em.date || '';
+                const body = em.body_html || escapeHtml(em.body || 'No content');
+                document.getElementById('gmailReaderBody').innerHTML = em.body_html ? body : `<pre style="white-space:pre-wrap">${body}</pre>`;
+                // Mark as read
+                apiFetch(`/mark-read/${emailId}`, { method: 'POST' }).catch(()=>{});
+                gmailLoadUnreadCount();
+            } catch(e) {
+                document.getElementById('gmailReaderBody').innerHTML = `<div class="text-danger">Error loading email: ${e.message}</div>`;
+            }
+        }
+
+        function gmailReplyTo() {
+            if (!gmailState.currentEmail) return;
+            const em = gmailState.currentEmail;
+            const fromEmail = (em.from || '').match(/<([^>]+)>/);
+            const to = fromEmail ? fromEmail[1] : em.from;
+            gmailOpenCompose(to, 'Re: ' + (em.subject || ''), `\n\n--- Original Message ---\nFrom: ${em.from}\nDate: ${em.date}\n\n${em.body || ''}`);
+        }
+
+        async function gmailReplyToId(emailId, folder) {
+            try {
+                const r = await apiFetch(`/email/${emailId}?folder=${decodeURIComponent(folder)}`);
+                const em = await r.json();
+                const fromEmail = (em.from || '').match(/<([^>]+)>/);
+                const to = fromEmail ? fromEmail[1] : em.from;
+                gmailOpenCompose(to, 'Re: ' + (em.subject || ''), `\n\n--- Original Message ---\nFrom: ${em.from}\nDate: ${em.date}\n\n${em.body || ''}`);
+            } catch(e) { alert('Error loading email for reply'); }
+        }
+
+        function gmailForwardEmail() {
+            if (!gmailState.currentEmail) return;
+            const em = gmailState.currentEmail;
+            gmailOpenCompose('', 'Fwd: ' + (em.subject || ''), `\n\n--- Forwarded Message ---\nFrom: ${em.from}\nDate: ${em.date}\nSubject: ${em.subject}\n\n${em.body || ''}`);
+        }
+
+        async function gmailSendEmail(e) {
+            e.preventDefault();
+            const to = document.getElementById('gmailComposeTo').value;
+            const cc = document.getElementById('gmailComposeCc').value;
+            const bcc = document.getElementById('gmailComposeBcc').value;
+            const subject = document.getElementById('gmailComposeSubject').value;
+            const body = document.getElementById('gmailComposeBody').value;
+            if (!to || !subject) { alert('Please fill in To and Subject fields'); return false; }
+            try {
+                const r = await apiFetch('/send', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ to, cc: cc || undefined, bcc: bcc || undefined, subject, body })
+                });
+                const d = await r.json();
+                if (d.success) {
+                    alert('✅ Email sent successfully!');
+                    document.getElementById('gmailComposeForm').reset();
+                    gmailShowTab('inbox');
+                } else { alert('❌ Failed to send: ' + (d.error || 'Unknown error')); }
+            } catch(e) { alert('❌ Error sending email: ' + e.message); }
+            return false;
+        }
+
+        async function gmailDeleteEmail(emailId, folder) {
+            if (!confirm('Move this email to Trash?')) return;
+            try {
+                await apiFetch(`/delete/${emailId}`, { method: 'DELETE' });
+                gmailLoadInbox();
+            } catch(e) { alert('Error deleting email'); }
+        }
+
+        async function gmailSearchEmails() {
+            const q = document.getElementById('gmailSearchQuery').value;
+            if (!q) return;
+            const results = document.getElementById('gmailSearchResults');
+            results.innerHTML = '<div class="text-center"><i class="fas fa-spinner fa-spin me-2"></i>Searching...</div>';
+            try {
+                const r = await apiFetch(`/search?q=${encodeURIComponent(q)}`);
+                const d = await r.json();
+                if (!d.results || d.results.length === 0) {
+                    results.innerHTML = '<div class="admin-card text-muted">No results found</div>'; return;
+                }
+                results.innerHTML = '<div class="admin-card"><h5>Found ' + d.results.length + ' results</h5><div class="admin-table"><table><thead><tr><th>From</th><th>Subject</th><th>Date</th></tr></thead><tbody>' +
+                    d.results.map(em => `<tr style="cursor:pointer" onclick="gmailViewEmail('${em.id}','INBOX')"><td>${escapeHtml((em.from||'').substring(0,30))}</td><td>${escapeHtml((em.subject||'').substring(0,50))}</td><td>${em.date?new Date(em.date).toLocaleDateString():''}</td></tr>`).join('') +
+                    '</tbody></table></div></div>';
+            } catch(e) { results.innerHTML = `<div class="admin-card text-danger">Search failed: ${e.message}</div>`; }
+        }
+
+        // === CONTACT GROUPS ===
+
+        async function gmailLoadContactGroups() {
+            const container = document.getElementById('gmailContactGroupsList');
+            try {
+                const r = await apiFetch('/contacts');
+                const d = await r.json();
+                gmailState.contactGroups = d.groups || {};
+                const groupNames = Object.keys(gmailState.contactGroups);
+                document.getElementById('gmailStatGroups').textContent = groupNames.length;
+                if (groupNames.length === 0) {
+                    container.innerHTML = '<div class="admin-card text-muted"><i class="fas fa-address-book me-2"></i>No contact groups yet. Click "New Group" to create one.</div>';
+                    return;
+                }
+                container.innerHTML = groupNames.map(name => {
+                    const contacts = gmailState.contactGroups[name];
+                    return `<div class="admin-card" style="border-left:4px solid var(--gold);">
+                        <div style="display:flex;justify-content:space-between;align-items:center;">
+                            <h5><i class="fas fa-users me-2"></i>${escapeHtml(name)} <span class="badge bg-primary">${contacts.length}</span></h5>
+                            <div style="display:flex;gap:0.3rem;">
+                                <button class="btn btn-sm btn-outline-primary" onclick="gmailShowAddContact('${escapeHtml(name)}')" title="Add contact"><i class="fas fa-user-plus"></i></button>
+                                <button class="btn btn-sm btn-outline-success" onclick="gmailSendToGroup('${escapeHtml(name)}')" title="Send email to group"><i class="fas fa-paper-plane"></i></button>
+                                <button class="btn btn-sm btn-outline-danger" onclick="gmailDeleteGroup('${escapeHtml(name)}')" title="Delete group"><i class="fas fa-trash"></i></button>
+                            </div>
+                        </div>
+                        ${contacts.length > 0 ? '<div class="mt-2">' + contacts.map((c,i) =>
+                            `<span class="badge bg-secondary me-1 mb-1" style="font-size:0.8rem;">${escapeHtml(c.name || c.email)} &lt;${escapeHtml(c.email)}&gt; <i class="fas fa-times ms-1" style="cursor:pointer" onclick="gmailRemoveFromGroup('${escapeHtml(name)}','${escapeHtml(c.email)}')"></i></span>`
+                        ).join('') + '</div>' : '<p class="text-muted mb-0 mt-2">No contacts in this group</p>'}
+                    </div>`;
+                }).join('');
+            } catch(e) {
+                container.innerHTML = `<div class="admin-card text-danger">Error loading groups: ${e.message}</div>`;
+            }
+        }
+
+        async function gmailCreateGroupPrompt() {
+            const name = prompt('Enter group name (e.g., "EC Members", "All Members", "Volunteers"):');
+            if (!name) return;
+            try {
+                const r = await apiFetch('/contacts/group', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ group_name: name })
+                });
+                const d = await r.json();
+                if (d.success) { alert('✅ Group "' + name + '" created!'); gmailLoadContactGroups(); }
+                else { alert('❌ ' + (d.error || 'Failed to create group')); }
+            } catch(e) { alert('Error: ' + e.message); }
+        }
+
+        function gmailShowAddContact(groupName) {
+            document.getElementById('gmailAddContactForm').style.display = 'block';
+            document.getElementById('gmailAddContactGroupName').textContent = groupName;
+            document.getElementById('gmailAddContactForm').dataset.group = groupName;
+            document.getElementById('gmailAddContactName').value = '';
+            document.getElementById('gmailAddContactEmail').value = '';
+        }
+
+        async function gmailAddContactToGroup() {
+            const group = document.getElementById('gmailAddContactForm').dataset.group;
+            const name = document.getElementById('gmailAddContactName').value;
+            const email = document.getElementById('gmailAddContactEmail').value;
+            if (!email) { alert('Email is required'); return; }
+            try {
+                const r = await apiFetch(`/contacts/group/${encodeURIComponent(group)}/add`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ contacts: [{ name: name || email, email }] })
+                });
+                const d = await r.json();
+                if (d.success) { gmailLoadContactGroups(); document.getElementById('gmailAddContactName').value = ''; document.getElementById('gmailAddContactEmail').value = ''; }
+                else { alert('❌ ' + (d.error || 'Failed')); }
+            } catch(e) { alert('Error: ' + e.message); }
+        }
+
+        async function gmailRemoveFromGroup(groupName, email) {
+            if (!confirm(`Remove ${email} from "${groupName}"?`)) return;
+            try {
+                await apiFetch(`/contacts/group/${encodeURIComponent(groupName)}/remove`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ emails: [email] })
+                });
+                gmailLoadContactGroups();
+            } catch(e) { alert('Error: ' + e.message); }
+        }
+
+        async function gmailDeleteGroup(name) {
+            if (!confirm(`Delete group "${name}" and all its contacts?`)) return;
+            try {
+                await apiFetch(`/contacts/group/${encodeURIComponent(name)}`, { method: 'DELETE' });
+                gmailLoadContactGroups();
+            } catch(e) { alert('Error: ' + e.message); }
+        }
+
+        function gmailSendToGroup(groupName) {
+            const contacts = gmailState.contactGroups[groupName] || [];
+            if (contacts.length === 0) { alert('No contacts in this group'); return; }
+            const emails = contacts.map(c => c.email).join(', ');
+            gmailOpenCompose(emails, '', '');
+        }
+
+        /* ================================================================
+         *  ENHANCED ADMIN SECTION LOADER
+         * ================================================================ */
+        (function patchShowAdminSection() {
+            const orig = showAdminSection;
+            showAdminSection = function(sectionId, clickedNav) {
+                orig(sectionId, clickedNav);
+                if (sectionId === 'evite') renderEviteHistory();
+                if (sectionId === 'rsvps') renderRsvpDashboard();
+                if (sectionId === 'gmail') { gmailCheckConnection(); gmailLoadInbox(); gmailLoadContactGroups(); }
+            };
+        })();
+
         /**
          * Run due diligence checks for member/admin workflows
          */
@@ -6403,7 +8299,7 @@
             const addCheck = (name, status, details) => results.push({ name, status, details });
 
             const memberSections = ['portalDashboard', 'portalProfile', 'portalFamily', 'portalPayments', 'portalBudget', 'portalMeetings', 'portalEvents', 'portalSurveys', 'portalDirectory', 'portalRadio', 'portalMagazine'];
-            const adminSections = ['adminDashboard', 'adminMembers', 'adminPayments', 'adminEvents', 'adminRsvps', 'adminComplaints', 'adminSurveys', 'adminAnnouncements', 'adminRadio', 'adminMagazine', 'adminBudget', 'adminVendors', 'adminVolunteers', 'adminMeetings'];
+            const adminSections = ['adminDashboard', 'adminMembers', 'adminPayments', 'adminEvents', 'adminRsvps', 'adminEvite', 'adminDataImport', 'adminComplaints', 'adminSurveys', 'adminAnnouncements', 'adminRadio', 'adminMagazine', 'adminBudget', 'adminVendors', 'adminVolunteers', 'adminMeetings', 'adminGmail'];
 
             if (scope === 'all' || scope === 'member') {
                 addCheck('Member portal overlay', !!document.getElementById('memberPortalOverlay'), 'Member full-screen overlay available');

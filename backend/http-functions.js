@@ -25,6 +25,8 @@ import * as complaints from 'backend/complaints.jsw';
 import * as guide from 'backend/guide.jsw';
 import * as magazine from 'backend/magazine.jsw';
 import * as documents from 'backend/documents.jsw';
+import * as emailGateway from 'backend/email-gateway.jsw';
+import * as setupCollections from 'backend/setup-collections.jsw';
 
 // ============================================
 // UTILITY FUNCTIONS
@@ -701,6 +703,271 @@ export async function post_submit_contact(request) {
 }
 
 // ============================================
+// EMAIL GATEWAY ENDPOINTS
+// (Replaces localhost gmail_service.py)
+// ============================================
+
+/**
+ * GET /_functions/email_status
+ * Check email service status
+ */
+export async function get_email_status(request) {
+    try {
+        const status = await emailGateway.getEmailStatus();
+        return jsonResponse(status);
+    } catch (error) {
+        return errorResponse(error.message, 500);
+    }
+}
+
+/**
+ * GET /_functions/email_unread
+ * Get unread message count
+ */
+export async function get_email_unread(request) {
+    try {
+        const result = await emailGateway.getUnreadCount();
+        return jsonResponse(result);
+    } catch (error) {
+        return jsonResponse({ unread_count: 0 });
+    }
+}
+
+/**
+ * GET /_functions/email_inbox
+ * Get inbox messages with pagination
+ * Query params: page, per_page, folder
+ */
+export async function get_email_inbox(request) {
+    try {
+        const page = parseInt(request.query?.page) || 1;
+        const perPage = parseInt(request.query?.per_page) || 20;
+        const folder = request.query?.folder || 'INBOX';
+
+        const result = await emailGateway.getInboxMessages(page, perPage, folder);
+        return jsonResponse(result);
+    } catch (error) {
+        return errorResponse(error.message, 500);
+    }
+}
+
+/**
+ * GET /_functions/email_message
+ * Get a single email/message by ID
+ * Query params: id, folder
+ */
+export async function get_email_message(request) {
+    try {
+        const messageId = request.query?.id;
+        if (!messageId) {
+            return errorResponse('Message ID is required', 400);
+        }
+        const result = await emailGateway.getMessage(messageId);
+        return jsonResponse(result);
+    } catch (error) {
+        return errorResponse(error.message, 500);
+    }
+}
+
+/**
+ * POST /_functions/email_mark_read
+ * Mark a message as read
+ */
+export async function post_email_mark_read(request) {
+    try {
+        const body = await parseBody(request);
+        if (!body || !body.id) {
+            return errorResponse('Message ID is required', 400);
+        }
+        const result = await emailGateway.markMessageRead(body.id);
+        return jsonResponse(result);
+    } catch (error) {
+        return errorResponse(error.message, 500);
+    }
+}
+
+/**
+ * POST /_functions/send_email
+ * Send a general email
+ */
+export async function post_send_email(request) {
+    try {
+        const body = await parseBody(request);
+        if (!body || !body.to || !body.subject) {
+            return errorResponse('To and subject are required', 400);
+        }
+        const result = await emailGateway.sendEmail(body);
+        return jsonResponse(result);
+    } catch (error) {
+        return errorResponse(error.message, 500);
+    }
+}
+
+/**
+ * POST /_functions/send_evite
+ * Send evite/invitation emails
+ */
+export async function post_send_evite(request) {
+    try {
+        const body = await parseBody(request);
+        if (!body || !body.recipients || !body.event_name) {
+            return errorResponse('Recipients and event_name are required', 400);
+        }
+        const result = await emailGateway.sendEviteEmails(body);
+        return jsonResponse(result);
+    } catch (error) {
+        return errorResponse(error.message, 500);
+    }
+}
+
+/**
+ * POST /_functions/email_delete
+ * Delete/trash a message
+ */
+export async function post_email_delete(request) {
+    try {
+        const body = await parseBody(request);
+        if (!body || !body.id) {
+            return errorResponse('Message ID is required', 400);
+        }
+        const result = await emailGateway.deleteMessage(body.id);
+        return jsonResponse(result);
+    } catch (error) {
+        return errorResponse(error.message, 500);
+    }
+}
+
+/**
+ * GET /_functions/email_search
+ * Search messages
+ * Query params: q
+ */
+export async function get_email_search(request) {
+    try {
+        const q = request.query?.q;
+        if (!q) {
+            return errorResponse('Search query is required', 400);
+        }
+        const result = await emailGateway.searchMessages(q);
+        return jsonResponse(result);
+    } catch (error) {
+        return errorResponse(error.message, 500);
+    }
+}
+
+/**
+ * GET /_functions/contacts
+ * Get all contact groups
+ */
+export async function get_contacts(request) {
+    try {
+        const result = await emailGateway.getContactGroups();
+        return jsonResponse(result);
+    } catch (error) {
+        return errorResponse(error.message, 500);
+    }
+}
+
+/**
+ * POST /_functions/contact_group_create
+ * Create a new contact group
+ */
+export async function post_contact_group_create(request) {
+    try {
+        const body = await parseBody(request);
+        if (!body || !body.group_name) {
+            return errorResponse('Group name is required', 400);
+        }
+        const result = await emailGateway.createContactGroup(body.group_name, body.description);
+        return jsonResponse(result);
+    } catch (error) {
+        return errorResponse(error.message, 500);
+    }
+}
+
+/**
+ * POST /_functions/contact_group_delete
+ * Delete a contact group
+ */
+export async function post_contact_group_delete(request) {
+    try {
+        const body = await parseBody(request);
+        if (!body || !body.group_name) {
+            return errorResponse('Group name is required', 400);
+        }
+        const result = await emailGateway.deleteContactGroup(body.group_name);
+        return jsonResponse(result);
+    } catch (error) {
+        return errorResponse(error.message, 500);
+    }
+}
+
+/**
+ * POST /_functions/contact_group_add
+ * Add contacts to a group
+ */
+export async function post_contact_group_add(request) {
+    try {
+        const body = await parseBody(request);
+        if (!body || !body.group_name || !body.contacts) {
+            return errorResponse('Group name and contacts are required', 400);
+        }
+        const result = await emailGateway.addContactsToGroup(body.group_name, body.contacts);
+        return jsonResponse(result);
+    } catch (error) {
+        return errorResponse(error.message, 500);
+    }
+}
+
+/**
+ * POST /_functions/contact_group_remove
+ * Remove contact from a group
+ */
+export async function post_contact_group_remove(request) {
+    try {
+        const body = await parseBody(request);
+        if (!body || !body.group_name || !body.emails) {
+            return errorResponse('Group name and emails are required', 400);
+        }
+        const result = await emailGateway.removeContactFromGroup(body.group_name, body.emails);
+        return jsonResponse(result);
+    } catch (error) {
+        return errorResponse(error.message, 500);
+    }
+}
+
+/**
+ * GET /_functions/rsvp_check
+ * Check RSVP replies for an event
+ * Query params: event_name, days_back
+ */
+export async function get_rsvp_check(request) {
+    try {
+        const eventName = request.query?.event_name || '';
+        const daysBack = parseInt(request.query?.days_back) || 30;
+        const result = await emailGateway.checkRSVPReplies(eventName, daysBack);
+        return jsonResponse(result);
+    } catch (error) {
+        return errorResponse(error.message, 500);
+    }
+}
+
+/**
+ * GET /_functions/sent_history
+ * Get sent email history
+ */
+export async function get_sent_history(request) {
+    try {
+        const page = parseInt(request.query?.page) || 1;
+        const perPage = parseInt(request.query?.per_page) || 20;
+        const result = await emailGateway.getSentEmailHistory(page, perPage);
+        return jsonResponse(result);
+    } catch (error) {
+        return errorResponse(error.message, 500);
+    }
+}
+
+// ============================================
 // OPTIONS HANDLERS (CORS)
 // ============================================
 
@@ -716,3 +983,42 @@ export function options_submit_survey(request) { return handleCors(); }
 export function options_submit_complaint(request) { return handleCors(); }
 export function options_complaint_followup(request) { return handleCors(); }
 export function options_submit_contact(request) { return handleCors(); }
+
+// Email gateway CORS handlers
+export function options_email_status(request) { return handleCors(); }
+export function options_email_unread(request) { return handleCors(); }
+export function options_email_inbox(request) { return handleCors(); }
+export function options_email_message(request) { return handleCors(); }
+export function options_email_mark_read(request) { return handleCors(); }
+export function options_send_email(request) { return handleCors(); }
+export function options_send_evite(request) { return handleCors(); }
+export function options_email_delete(request) { return handleCors(); }
+export function options_email_search(request) { return handleCors(); }
+export function options_contacts(request) { return handleCors(); }
+export function options_contact_group_create(request) { return handleCors(); }
+export function options_contact_group_delete(request) { return handleCors(); }
+export function options_contact_group_add(request) { return handleCors(); }
+export function options_contact_group_remove(request) { return handleCors(); }
+export function options_rsvp_check(request) { return handleCors(); }
+export function options_sent_history(request) { return handleCors(); }
+
+// ============================================
+// SETUP ENDPOINT (one-time use)
+// ============================================
+// Call GET https://www.jaxbengali.org/_functions/setup_email_collections
+// to auto-create the 4 data collections
+
+export function get_setup_email_collections(request) {
+    return setupCollections.setupAllCollections()
+        .then(result => ok({ headers: corsHeaders, body: result }))
+        .catch(err => serverError({ headers: corsHeaders, body: { error: err.message } }));
+}
+
+export function get_verify_email_collections(request) {
+    return setupCollections.verifyCollections()
+        .then(result => ok({ headers: corsHeaders, body: result }))
+        .catch(err => serverError({ headers: corsHeaders, body: { error: err.message } }));
+}
+
+export function options_setup_email_collections(request) { return handleCors(); }
+export function options_verify_email_collections(request) { return handleCors(); }
