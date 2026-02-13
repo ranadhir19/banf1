@@ -7094,10 +7094,41 @@
             // Show loading
             statusDiv.innerHTML = '<div class="text-info"><i class="fas fa-spinner fa-spin me-2"></i>Verifying credentials...</div>';
             
-            // Simulate admin verification (replace with actual API call)
             setTimeout(() => {
-                statusDiv.innerHTML = '<div class="alert alert-info"><i class="fas fa-info-circle me-2"></i>Admin portal features are being integrated with Wix. Please check back soon!</div>';
-            }, 1000);
+                // Check DemoData.testAccounts for matching admin credentials
+                const account = DemoData.testAccounts[email];
+                
+                if (account && account.password === password) {
+                    const member = account.member;
+                    // Verify this account has admin/EC privileges
+                    if (member.isAdmin || member.role === 'ec_member' || (member.roles && member.roles.includes('ec_member'))) {
+                        statusDiv.innerHTML = '<div class="alert alert-success"><i class="fas fa-check-circle me-2"></i>Welcome, ' + member.firstName + '! Opening Admin Portal...</div>';
+                        setTimeout(() => {
+                            showAdminPortal(member);
+                        }, 800);
+                        return;
+                    } else {
+                        statusDiv.innerHTML = '<div class="alert alert-warning"><i class="fas fa-exclamation-triangle me-2"></i>This account does not have admin privileges. EC members only.</div>';
+                        return;
+                    }
+                }
+                
+                // Also check dynamic registrations with admin flag
+                const dynamicAdmin = Object.values(DemoData.pendingRegistrations).find(
+                    reg => reg.completed && (reg.username === email || (reg.email && reg.email.toLowerCase() === email)) && reg.password === password && reg.memberData && reg.memberData.isAdmin
+                );
+                
+                if (dynamicAdmin) {
+                    statusDiv.innerHTML = '<div class="alert alert-success"><i class="fas fa-check-circle me-2"></i>Welcome! Opening Admin Portal...</div>';
+                    setTimeout(() => {
+                        showAdminPortal(dynamicAdmin.memberData);
+                    }, 800);
+                    return;
+                }
+                
+                // Login failed
+                statusDiv.innerHTML = `<div class="alert alert-danger"><i class="fas fa-exclamation-circle me-2"></i><strong>Login failed.</strong><br><br>Try demo admin credentials:<br>Username: <code>admin_test</code> | Password: <code>admin</code></div>`;
+            }, 800);
         }
         
         /**
