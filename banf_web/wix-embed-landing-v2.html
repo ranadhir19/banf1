@@ -2886,16 +2886,120 @@
         let currentProgramIndex = 0;
         let currentProgram = null;
         
-        // Radio API endpoints (using the autonomous radio system)
-        const GMAIL_API_BASE = 'http://127.0.0.1:5001/api/gmail';
-        const RADIO_API_BASE = 'http://127.0.0.1:5000/api/radio';
-        const RADIO_ENDPOINTS = {
+        // ========== API CONFIGURATION ==========
+        // Auto-detect environment: Wix production vs local development
+        // Production: calls Wix Velo HTTP Functions at /_functions/
+        // Local dev: falls back to localhost Flask services
+        const WIX_SITE_URL = 'https://www.jaxbengali.org';
+        const IS_PRODUCTION = (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1');
+        
+        // Email/Evite API — Wix Velo backend (no local dependency)
+        const WIX_API_BASE = WIX_SITE_URL + '/_functions';
+        const GMAIL_API_BASE = IS_PRODUCTION ? WIX_API_BASE : 'http://127.0.0.1:5001/api/gmail';
+        
+        // Radio API — still requires streaming server (graceful degradation)
+        const RADIO_API_BASE = IS_PRODUCTION ? (WIX_API_BASE) : 'http://127.0.0.1:5000/api/radio';
+        const RADIO_ENDPOINTS = IS_PRODUCTION ? {
+            schedule: `${WIX_API_BASE}/radio_schedule`,
+            currentStatus: `${WIX_API_BASE}/radio_status`,
+            startCurrent: `${WIX_API_BASE}/radio_start`,
+            nextTrack: `${WIX_API_BASE}/radio_next`,
+            previousTrack: `${WIX_API_BASE}/radio_previous`
+        } : {
             schedule: `${RADIO_API_BASE}/autonomous/schedule`,
             currentStatus: `${RADIO_API_BASE}/current-status`,
             startCurrent: `${RADIO_API_BASE}/autonomous/start-current`,
             nextTrack: `${RADIO_API_BASE}/autonomous/next-track`,
             previousTrack: `${RADIO_API_BASE}/autonomous/previous-track`
         };
+        
+        /**
+         * API endpoint mapper - translates local Flask paths to Wix Velo HTTP Function paths
+         * Local:  GMAIL_API_BASE + '/send-evite'  → http://127.0.0.1:5001/api/gmail/send-evite
+         * Prod:   WIX_API_BASE + '/send_evite'    → https://www.jaxbengali.org/_functions/send_evite
+         */
+        function apiUrl(endpoint) {
+            if (!IS_PRODUCTION) return GMAIL_API_BASE + endpoint;
+            
+            // Map Flask REST paths → Wix flat function names
+            const routeMap = {
+                '/status':          '/email_status',
+                '/unread':          '/email_unread',
+                '/send':            '/send_email',
+                '/send-evite':      '/send_evite',
+                '/contacts':        '/contacts',
+                '/contacts/group':  '/contact_group_create',
+                '/rsvp-check':      '/rsvp_check'
+            };
+            
+            // Direct mapping
+            if (routeMap[endpoint]) return WIX_API_BASE + routeMap[endpoint];
+            
+            // Dynamic paths with parameters
+            if (endpoint.startsWith('/inbox'))   return WIX_API_BASE + '/email_inbox' + endpoint.replace('/inbox', '');
+            if (endpoint.startsWith('/search'))  return WIX_API_BASE + '/email_search' + endpoint.replace('/search', '');
+            if (endpoint.startsWith('/email/'))  return WIX_API_BASE + '/email_message?id=' + endpoint.split('/email/')[1].split('?')[0] + (endpoint.includes('?') ? '&' + endpoint.split('?')[1] : '');
+            if (endpoint.startsWith('/mark-read/')) return WIX_API_BASE + '/email_mark_read';
+            if (endpoint.startsWith('/delete/'))    return WIX_API_BASE + '/email_delete';
+            if (endpoint.includes('/contacts/group/') && endpoint.includes('/add'))    return WIX_API_BASE + '/contact_group_add';
+            if (endpoint.includes('/contacts/group/') && endpoint.includes('/remove')) return WIX_API_BASE + '/contact_group_remove';
+            if (endpoint.match(/\/contacts\/group\/[^/]+$/)) return WIX_API_BASE + '/contact_group_delete';
+            
+            // Fallback
+            return WIX_API_BASE + endpoint.replace(/-/g, '_').replace(/\//g, '_');
+        }
+        
+        /**
+         * Enhanced fetch wrapper for Wix API compatibility
+         * - Converts DELETE methods to POST (Wix HTTP functions only support GET/POST)
+         * - Adds group_name/id to body for Wix endpoints that need it
+         */
+        function apiFetch(endpoint, options = {}) {
+            let url = apiUrl(endpoint);
+            let opts = { ...options };
+            
+            if (IS_PRODUCTION) {
+                // Wix only supports GET and POST - convert DELETE to POST
+                if (opts.method === 'DELETE') {
+                    opts.method = 'POST';
+                    // Ensure body has the ID if it was in the URL
+                    const deleteIdMatch = endpoint.match(/\/delete\/(.+)/);
+                    if (deleteIdMatch) {
+                        opts.headers = opts.headers || { 'Content-Type': 'application/json' };
+                        opts.body = JSON.stringify({ id: deleteIdMatch[1] });
+                    }
+                }
+                
+                // For mark-read, extract ID from URL into body
+                const markReadMatch = endpoint.match(/\/mark-read\/(.+)/);
+                if (markReadMatch) {
+                    opts.method = 'POST';
+                    opts.headers = { 'Content-Type': 'application/json' };
+                    opts.body = JSON.stringify({ id: markReadMatch[1] });
+                }
+                
+                // For contact group operations, extract group name from URL into body
+                const groupMatch = endpoint.match(/\/contacts\/group\/([^/]+)/);
+                if (groupMatch) {
+                    const groupName = decodeURIComponent(groupMatch[1]);
+                    opts.method = opts.method || 'POST';
+                    opts.headers = opts.headers || { 'Content-Type': 'application/json' };
+                    
+                    if (endpoint.includes('/add') || endpoint.includes('/remove')) {
+                        // Merge group_name into existing body
+                        let existingBody = {};
+                        try { existingBody = JSON.parse(opts.body || '{}'); } catch(e) {}
+                        existingBody.group_name = groupName;
+                        opts.body = JSON.stringify(existingBody);
+                    } else if (opts.method === 'POST' && !endpoint.includes('/add') && !endpoint.includes('/remove')) {
+                        // Delete group - send group_name in body
+                        opts.body = JSON.stringify({ group_name: groupName });
+                    }
+                }
+            }
+            
+            return fetch(url, opts);
+        }
         
         // Program categories with display info
         const PROGRAM_CATEGORIES = {
@@ -7571,7 +7675,7 @@
                         rsvp_deadline: date
                     };
 
-                    const r = await fetch(GMAIL_API_BASE + '/send-evite', {
+                    const r = await apiFetch('/send-evite', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(evitePayload)
@@ -7889,28 +7993,28 @@
             const text = document.getElementById('gmailStatusText');
             const detail = document.getElementById('gmailStatusDetail');
             const bar = document.getElementById('gmailConnectionStatus');
-            icon.style.color = '#ff9800'; text.textContent = 'Connecting...'; detail.textContent = 'Verifying Gmail IMAP/SMTP access...';
+            icon.style.color = '#ff9800'; text.textContent = 'Connecting...'; detail.textContent = IS_PRODUCTION ? 'Connecting to BANF Email Service...' : 'Verifying Gmail IMAP/SMTP access...';
             try {
-                const r = await fetch(GMAIL_API_BASE + '/status');
+                const r = await apiFetch('/status');
                 const d = await r.json();
                 if (d.status === 'connected') {
-                    icon.style.color = '#4CAF50'; text.textContent = '✅ Connected to banfjax@gmail.com';
-                    detail.textContent = `IMAP: ${d.imap ? 'OK' : 'FAIL'} | SMTP: ${d.smtp ? 'OK' : 'FAIL'}`;
+                    icon.style.color = '#4CAF50'; text.textContent = '✅ Connected to BANF Email Service';
+                    detail.textContent = IS_PRODUCTION ? `Service: ${d.service_type || 'Wix'} | Sent Today: ${d.sent_today || 0}` : `IMAP: ${d.imap ? 'OK' : 'FAIL'} | SMTP: ${d.smtp ? 'OK' : 'FAIL'}`;
                     bar.style.borderLeftColor = '#4CAF50'; gmailState.connected = true;
                     gmailLoadUnreadCount();
                 } else {
                     icon.style.color = '#f44336'; text.textContent = '❌ Connection Failed';
-                    detail.textContent = d.error || 'Check Gmail service is running on port 5001'; bar.style.borderLeftColor = '#f44336';
+                    detail.textContent = d.error || (IS_PRODUCTION ? 'Email service temporarily unavailable' : 'Check Gmail service is running on port 5001'); bar.style.borderLeftColor = '#f44336';
                 }
             } catch(e) {
-                icon.style.color = '#f44336'; text.textContent = '❌ Gmail Service Unreachable';
-                detail.textContent = 'Start gmail_service.py (python gmail_service.py) on port 5001'; bar.style.borderLeftColor = '#f44336';
+                icon.style.color = '#f44336'; text.textContent = '❌ Email Service Unreachable';
+                detail.textContent = IS_PRODUCTION ? 'Email service temporarily unavailable. Please try again later.' : 'Start gmail_service.py (python gmail_service.py) on port 5001'; bar.style.borderLeftColor = '#f44336';
             }
         }
 
         async function gmailLoadUnreadCount() {
             try {
-                const r = await fetch(GMAIL_API_BASE + '/unread'); const d = await r.json();
+                const r = await apiFetch('/unread'); const d = await r.json();
                 const badge = document.getElementById('gmailUnreadBadge');
                 const stat = document.getElementById('gmailStatUnread');
                 if (d.unread_count > 0) { badge.style.display = 'inline-block'; badge.textContent = d.unread_count; }
@@ -7944,7 +8048,7 @@
             const folder = document.getElementById('gmailFolderSelect').value;
             tbody.innerHTML = '<tr><td colspan="5" class="text-center"><i class="fas fa-spinner fa-spin me-2"></i>Loading...</td></tr>';
             try {
-                const r = await fetch(`${GMAIL_API_BASE}/inbox?page=${gmailState.currentPage}&per_page=${gmailState.perPage}&folder=${encodeURIComponent(folder)}`);
+                const r = await apiFetch(`/inbox?page=${gmailState.currentPage}&per_page=${gmailState.perPage}&folder=${encodeURIComponent(folder)}`);
                 const d = await r.json();
                 if (!d.emails || d.emails.length === 0) {
                     tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">No emails found</td></tr>';
@@ -7978,7 +8082,7 @@
                     }
                 }
             } catch(e) {
-                tbody.innerHTML = `<tr><td colspan="5" class="text-center text-danger">❌ Failed to load: ${e.message}<br><small>Ensure gmail_service.py is running</small></td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="5" class="text-center text-danger">❌ Failed to load: ${e.message}<br><small>${IS_PRODUCTION ? 'Email service temporarily unavailable' : 'Ensure gmail_service.py is running'}</small></td></tr>`;
             }
         }
 
@@ -7986,7 +8090,7 @@
             document.getElementById('gmailReaderArea').style.display = 'block';
             document.getElementById('gmailReaderBody').innerHTML = '<i class="fas fa-spinner fa-spin"></i> Loading...';
             try {
-                const r = await fetch(`${GMAIL_API_BASE}/email/${emailId}?folder=${folder || 'INBOX'}`);
+                const r = await apiFetch(`/email/${emailId}?folder=${folder || 'INBOX'}`);
                 const em = await r.json();
                 gmailState.currentEmail = em;
                 document.getElementById('gmailReaderSubject').textContent = em.subject || '(no subject)';
@@ -7995,7 +8099,7 @@
                 const body = em.body_html || escapeHtml(em.body || 'No content');
                 document.getElementById('gmailReaderBody').innerHTML = em.body_html ? body : `<pre style="white-space:pre-wrap">${body}</pre>`;
                 // Mark as read
-                fetch(`${GMAIL_API_BASE}/mark-read/${emailId}`, { method: 'POST' }).catch(()=>{});
+                apiFetch(`/mark-read/${emailId}`, { method: 'POST' }).catch(()=>{});
                 gmailLoadUnreadCount();
             } catch(e) {
                 document.getElementById('gmailReaderBody').innerHTML = `<div class="text-danger">Error loading email: ${e.message}</div>`;
@@ -8012,7 +8116,7 @@
 
         async function gmailReplyToId(emailId, folder) {
             try {
-                const r = await fetch(`${GMAIL_API_BASE}/email/${emailId}?folder=${decodeURIComponent(folder)}`);
+                const r = await apiFetch(`/email/${emailId}?folder=${decodeURIComponent(folder)}`);
                 const em = await r.json();
                 const fromEmail = (em.from || '').match(/<([^>]+)>/);
                 const to = fromEmail ? fromEmail[1] : em.from;
@@ -8035,7 +8139,7 @@
             const body = document.getElementById('gmailComposeBody').value;
             if (!to || !subject) { alert('Please fill in To and Subject fields'); return false; }
             try {
-                const r = await fetch(GMAIL_API_BASE + '/send', {
+                const r = await apiFetch('/send', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ to, cc: cc || undefined, bcc: bcc || undefined, subject, body })
@@ -8053,7 +8157,7 @@
         async function gmailDeleteEmail(emailId, folder) {
             if (!confirm('Move this email to Trash?')) return;
             try {
-                await fetch(`${GMAIL_API_BASE}/delete/${emailId}`, { method: 'DELETE' });
+                await apiFetch(`/delete/${emailId}`, { method: 'DELETE' });
                 gmailLoadInbox();
             } catch(e) { alert('Error deleting email'); }
         }
@@ -8064,7 +8168,7 @@
             const results = document.getElementById('gmailSearchResults');
             results.innerHTML = '<div class="text-center"><i class="fas fa-spinner fa-spin me-2"></i>Searching...</div>';
             try {
-                const r = await fetch(`${GMAIL_API_BASE}/search?q=${encodeURIComponent(q)}`);
+                const r = await apiFetch(`/search?q=${encodeURIComponent(q)}`);
                 const d = await r.json();
                 if (!d.results || d.results.length === 0) {
                     results.innerHTML = '<div class="admin-card text-muted">No results found</div>'; return;
@@ -8080,7 +8184,7 @@
         async function gmailLoadContactGroups() {
             const container = document.getElementById('gmailContactGroupsList');
             try {
-                const r = await fetch(GMAIL_API_BASE + '/contacts');
+                const r = await apiFetch('/contacts');
                 const d = await r.json();
                 gmailState.contactGroups = d.groups || {};
                 const groupNames = Object.keys(gmailState.contactGroups);
@@ -8114,7 +8218,7 @@
             const name = prompt('Enter group name (e.g., "EC Members", "All Members", "Volunteers"):');
             if (!name) return;
             try {
-                const r = await fetch(GMAIL_API_BASE + '/contacts/group', {
+                const r = await apiFetch('/contacts/group', {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ group_name: name })
                 });
@@ -8138,7 +8242,7 @@
             const email = document.getElementById('gmailAddContactEmail').value;
             if (!email) { alert('Email is required'); return; }
             try {
-                const r = await fetch(`${GMAIL_API_BASE}/contacts/group/${encodeURIComponent(group)}/add`, {
+                const r = await apiFetch(`/contacts/group/${encodeURIComponent(group)}/add`, {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ contacts: [{ name: name || email, email }] })
                 });
@@ -8151,7 +8255,7 @@
         async function gmailRemoveFromGroup(groupName, email) {
             if (!confirm(`Remove ${email} from "${groupName}"?`)) return;
             try {
-                await fetch(`${GMAIL_API_BASE}/contacts/group/${encodeURIComponent(groupName)}/remove`, {
+                await apiFetch(`/contacts/group/${encodeURIComponent(groupName)}/remove`, {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ emails: [email] })
                 });
@@ -8162,7 +8266,7 @@
         async function gmailDeleteGroup(name) {
             if (!confirm(`Delete group "${name}" and all its contacts?`)) return;
             try {
-                await fetch(`${GMAIL_API_BASE}/contacts/group/${encodeURIComponent(name)}`, { method: 'DELETE' });
+                await apiFetch(`/contacts/group/${encodeURIComponent(name)}`, { method: 'DELETE' });
                 gmailLoadContactGroups();
             } catch(e) { alert('Error: ' + e.message); }
         }
