@@ -1,0 +1,636 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BANF Comprehensive Acceptance Test — Role-Based Workflow Testing</title>
+<style>
+:root {
+    --pass: #4CAF50; --fail: #f44336; --skip: #FF9800; --info: #2196F3;
+    --bg: #f8f9fa; --card-bg: #fff; --border: #dee2e6; --text: #333;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; }
+.header { background: linear-gradient(135deg, #1a237e, #4a148c); color: #fff; padding: 2rem; text-align: center; }
+.header h1 { font-size: 1.8rem; margin-bottom: 0.5rem; }
+.header p { opacity: 0.9; font-size: 0.95rem; }
+.summary-bar { display: flex; gap: 1rem; padding: 1rem 2rem; background: #fff; border-bottom: 2px solid var(--border); flex-wrap: wrap; align-items: center; }
+.summary-stat { padding: 0.5rem 1rem; border-radius: 8px; font-weight: 600; }
+.summary-stat.total { background: #e3f2fd; color: #1565C0; }
+.summary-stat.pass { background: #e8f5e9; color: #2E7D32; }
+.summary-stat.fail { background: #ffebee; color: #c62828; }
+.summary-stat.skip { background: #fff3e0; color: #E65100; }
+.tabs { display: flex; gap: 0; border-bottom: 2px solid var(--border); background: #fff; overflow-x: auto; padding: 0 1rem; }
+.tab { padding: 0.75rem 1.25rem; cursor: pointer; border: none; background: none; font-size: 0.85rem; font-weight: 500; border-bottom: 3px solid transparent; white-space: nowrap; transition: all 0.2s; }
+.tab:hover { background: #f5f5f5; }
+.tab.active { border-bottom-color: #4a148c; color: #4a148c; font-weight: 700; }
+.tab-content { display: none; padding: 1.5rem 2rem; max-width: 1400px; margin: 0 auto; }
+.tab-content.active { display: block; }
+.workflow-group { margin-bottom: 2rem; }
+.workflow-title { font-size: 1.2rem; font-weight: 700; margin-bottom: 1rem; padding: 0.75rem 1rem; background: linear-gradient(135deg, #ede7f6, #f3e5f5); border-radius: 8px; display: flex; align-items: center; gap: 0.5rem; }
+.test-card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 0.75rem; overflow: hidden; }
+.test-header { display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem 1rem; cursor: pointer; }
+.test-header:hover { background: #fafafa; }
+.test-id { font-family: monospace; font-size: 0.75rem; background: #e8eaf6; padding: 0.2rem 0.5rem; border-radius: 4px; min-width: 70px; text-align: center; }
+.test-name { flex: 1; font-weight: 500; }
+.test-status { display: flex; align-items: center; gap: 0.5rem; }
+.status-select { border: 2px solid var(--border); border-radius: 6px; padding: 0.25rem 0.5rem; font-size: 0.8rem; font-weight: 600; cursor: pointer; }
+.status-select.pass { border-color: var(--pass); color: var(--pass); background: #e8f5e9; }
+.status-select.fail { border-color: var(--fail); color: var(--fail); background: #ffebee; }
+.status-select.skip { border-color: var(--skip); color: var(--skip); background: #fff3e0; }
+.test-details { padding: 0.5rem 1rem 1rem 1rem; border-top: 1px solid #eee; display: none; font-size: 0.85rem; }
+.test-details.open { display: block; }
+.detail-row { display: flex; gap: 0.5rem; margin-bottom: 0.25rem; }
+.detail-label { font-weight: 600; min-width: 100px; color: #666; }
+.detail-steps { background: #f5f5f5; padding: 0.75rem; border-radius: 6px; margin-top: 0.5rem; }
+.detail-steps ol { padding-left: 1.2rem; }
+.detail-steps li { margin-bottom: 0.25rem; }
+.notes-input { width: 100%; border: 1px solid var(--border); border-radius: 6px; padding: 0.5rem; margin-top: 0.5rem; font-size: 0.85rem; resize: vertical; min-height: 50px; }
+.cred-box { background: #fff3e0; border: 1px solid #FFB74D; border-radius: 8px; padding: 1rem; margin-bottom: 1.5rem; }
+.cred-box h4 { margin-bottom: 0.5rem; }
+.cred-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+.cred-table th, .cred-table td { padding: 0.4rem 0.75rem; border: 1px solid #ddd; text-align: left; }
+.cred-table th { background: #FFF8E1; }
+.cred-table code { background: #f5f5f5; padding: 0.1rem 0.3rem; border-radius: 3px; font-size: 0.85em; }
+.section-badge { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 12px; font-size: 0.7rem; font-weight: 600; margin-left: 0.25rem; }
+.badge-member { background: #e8f5e9; color: #2E7D32; }
+.badge-admin { background: #e3f2fd; color: #1565C0; }
+.badge-ec { background: #fce4ec; color: #c62828; }
+.badge-evite { background: #f3e5f5; color: #7B1FA2; }
+.badge-radio { background: #fff3e0; color: #E65100; }
+.badge-import { background: #e0f2f1; color: #00695C; }
+.btn-row { display: flex; gap: 0.5rem; flex-wrap: wrap; margin: 1rem 0; }
+.btn { padding: 0.5rem 1rem; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 0.85rem; }
+.btn-primary { background: #4a148c; color: #fff; }
+.btn-success { background: var(--pass); color: #fff; }
+.btn-danger { background: var(--fail); color: #fff; }
+.btn-warning { background: var(--skip); color: #fff; }
+.btn-info { background: var(--info); color: #fff; }
+.progress-bar-container { width: 100%; height: 8px; background: #eee; border-radius: 4px; margin: 0.5rem 0; }
+.progress-bar-fill { height: 100%; border-radius: 4px; transition: width 0.3s; }
+@media (max-width: 768px) {
+    .summary-bar { flex-direction: column; }
+    .tabs { flex-wrap: nowrap; }
+    .tab-content { padding: 1rem; }
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+    <h1>🔱 BANF Comprehensive Acceptance Test</h1>
+    <p>Role-Based Workflow Testing — Member, Admin, EC Roles, Evite, Data Import, Radio</p>
+    <p style="font-size:0.8rem; opacity:0.7;">Test Target: wix-embed-landing-v2.html | Generated: <span id="generatedDate"></span></p>
+</div>
+
+<div class="summary-bar" id="summaryBar">
+    <div class="summary-stat total" id="statTotal">Total: 0</div>
+    <div class="summary-stat pass" id="statPass">✅ Pass: 0</div>
+    <div class="summary-stat fail" id="statFail">❌ Fail: 0</div>
+    <div class="summary-stat skip" id="statSkip">⏭️ Skip: 0</div>
+    <div style="flex:1;"></div>
+    <div class="btn-row" style="margin:0;">
+        <button class="btn btn-success" onclick="markAllVisible('pass')">All Pass</button>
+        <button class="btn btn-danger" onclick="markAllVisible('fail')">All Fail</button>
+        <button class="btn btn-warning" onclick="resetAll()">Reset</button>
+        <button class="btn btn-info" onclick="exportResults()">📥 Export</button>
+    </div>
+</div>
+
+<div class="tabs" id="mainTabs">
+    <div class="tab active" onclick="switchTab('overview')">📊 Overview</div>
+    <div class="tab" onclick="switchTab('member')">👤 Member</div>
+    <div class="tab" onclick="switchTab('admin')">🔑 Admin</div>
+    <div class="tab" onclick="switchTab('ec-events')">🎯 EC: Events</div>
+    <div class="tab" onclick="switchTab('ec-sponsorship')">💰 EC: Sponsors</div>
+    <div class="tab" onclick="switchTab('ec-members')">📋 EC: Members</div>
+    <div class="tab" onclick="switchTab('ec-vendors')">🍽️ EC: Vendors</div>
+    <div class="tab" onclick="switchTab('ec-accounts')">🏦 EC: Accounts</div>
+    <div class="tab" onclick="switchTab('ec-payments')">💳 EC: Payments</div>
+    <div class="tab" onclick="switchTab('ec-comms')">📢 EC: Comms</div>
+    <div class="tab" onclick="switchTab('ec-ads')">📰 EC: Ads</div>
+    <div class="tab" onclick="switchTab('evite')">📨 Evite</div>
+    <div class="tab" onclick="switchTab('import')">📤 Data Import</div>
+    <div class="tab" onclick="switchTab('radio')">📻 Radio</div>
+</div>
+
+<!-- ==================== OVERVIEW TAB ==================== -->
+<div class="tab-content active" id="tab-overview">
+    <h2 style="margin-bottom:1rem;">Test Plan Overview</h2>
+    <p>This acceptance test covers <strong>all workflows and features</strong> for every user role. Each role has specific credentials and permissions that restrict which admin sections are accessible.</p>
+
+    <div class="cred-box">
+        <h4>🔐 Test Account Credentials</h4>
+        <table class="cred-table">
+            <thead><tr><th>Role</th><th>Username</th><th>Password</th><th>Name</th><th>Permitted Sections</th></tr></thead>
+            <tbody>
+                <tr><td><span class="section-badge badge-member">Member</span> Standard Member</td><td><code>member_test</code></td><td><code>test123</code></td><td>Ananya Dasgupta</td><td>Full member portal</td></tr>
+                <tr><td><span class="section-badge badge-admin">Admin</span> Full Admin</td><td><code>admin_test</code></td><td><code>admin123</code></td><td>Ranadhir Basu</td><td>All admin sections</td></tr>
+                <tr><td><span class="section-badge badge-ec">EC</span> Event Coordinator</td><td><code>ec_events</code></td><td><code>events123</code></td><td>Priya Sen</td><td>Events, RSVPs, Evite, Volunteers</td></tr>
+                <tr><td><span class="section-badge badge-ec">EC</span> Sponsorship Mgr</td><td><code>ec_sponsorship</code></td><td><code>sponsor123</code></td><td>Amit Roy</td><td>Vendors, Budget</td></tr>
+                <tr><td><span class="section-badge badge-ec">EC</span> Secretary</td><td><code>ec_members</code></td><td><code>members123</code></td><td>Shreya Das</td><td>Members, Meetings, Directory</td></tr>
+                <tr><td><span class="section-badge badge-ec">EC</span> Vendor Coordinator</td><td><code>ec_vendors</code></td><td><code>vendor123</code></td><td>Rina Mukherjee</td><td>Vendors, Events</td></tr>
+                <tr><td><span class="section-badge badge-ec">EC</span> Treasurer</td><td><code>ec_accounts</code></td><td><code>accounts123</code></td><td>Subir Ghosh</td><td>Payments, Budget, Vendors</td></tr>
+                <tr><td><span class="section-badge badge-ec">EC</span> Asst. Treasurer</td><td><code>ec_payments</code></td><td><code>payment123</code></td><td>Deepa Banerjee</td><td>Payments</td></tr>
+                <tr><td><span class="section-badge badge-ec">EC</span> Communications</td><td><code>ec_comms</code></td><td><code>comms123</code></td><td>Tanmay Chatterjee</td><td>Announcements, Surveys, Complaints, Magazine</td></tr>
+                <tr><td><span class="section-badge badge-ec">EC</span> Ad Manager</td><td><code>ec_ads</code></td><td><code>ads123</code></td><td>Mousumi Basu</td><td>Vendors, Announcements</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <h3 style="margin: 1.5rem 0 0.5rem;">Test Plan Hierarchy</h3>
+    <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 1rem;">
+        <div style="background:#e8f5e9; padding:1rem; border-radius:8px;">
+            <strong>👤 Member Workflows</strong>
+            <ul style="font-size:0.85rem; margin-top:0.5rem; padding-left:1.2rem;">
+                <li>Login / Signup / Code Verification</li>
+                <li>Dashboard & Profile</li>
+                <li>Family Members</li>
+                <li>Payments & Budget</li>
+                <li>Events & RSVP (with dietary)</li>
+                <li>Surveys & Directory</li>
+                <li>Radio & Magazine</li>
+                <li>Volunteer Signup</li>
+            </ul>
+        </div>
+        <div style="background:#e3f2fd; padding:1rem; border-radius:8px;">
+            <strong>🔑 Admin Workflows</strong>
+            <ul style="font-size:0.85rem; margin-top:0.5rem; padding-left:1.2rem;">
+                <li>Admin Login / Dashboard</li>
+                <li>Member Management</li>
+                <li>Payment Tracking</li>
+                <li>Event & RSVP Management</li>
+                <li>Complaints / Surveys / Announcements</li>
+                <li>Budget / Vendors / Volunteers</li>
+                <li>Radio / Magazine / Meetings</li>
+            </ul>
+        </div>
+        <div style="background:#fce4ec; padding:1rem; border-radius:8px;">
+            <strong>🎯 EC Role Workflows</strong>
+            <ul style="font-size:0.85rem; margin-top:0.5rem; padding-left:1.2rem;">
+                <li>8 EC roles with scoped access</li>
+                <li>Permission boundary testing</li>
+                <li>Section visibility validation</li>
+                <li>Cross-role isolation</li>
+            </ul>
+        </div>
+        <div style="background:#f3e5f5; padding:1rem; border-radius:8px;">
+            <strong>📨 Evite Integration</strong>
+            <ul style="font-size:0.85rem; margin-top:0.5rem; padding-left:1.2rem;">
+                <li>Send Invitations</li>
+                <li>Template Management</li>
+                <li>RSVP Tracking (adult/kid/dietary)</li>
+                <li>Report Generation & Export</li>
+                <li>Reminder Sending</li>
+            </ul>
+        </div>
+        <div style="background:#e0f2f1; padding:1rem; border-radius:8px;">
+            <strong>📤 Data Import</strong>
+            <ul style="font-size:0.85rem; margin-top:0.5rem; padding-left:1.2rem;">
+                <li>CSV Upload for Members</li>
+                <li>Event Data Import</li>
+                <li>Payment Import</li>
+                <li>Template Download</li>
+                <li>Preview & Confirm</li>
+            </ul>
+        </div>
+        <div style="background:#fff3e0; padding:1rem; border-radius:8px;">
+            <strong>📻 Radio Program</strong>
+            <ul style="font-size:0.85rem; margin-top:0.5rem; padding-left:1.2rem;">
+                <li>Radio Player UI</li>
+                <li>Stream Controls</li>
+                <li>Schedule Display</li>
+                <li>Admin Radio Section</li>
+            </ul>
+        </div>
+    </div>
+</div>
+
+<!-- ==================== MEMBER TAB ==================== -->
+<div class="tab-content" id="tab-member">
+    <div class="cred-box">
+        <h4>👤 Member Account</h4>
+        <p>Login: <code>member_test</code> / <code>test123</code> — Ananya Dasgupta (Family membership)</p>
+    </div>
+
+    <div class="workflow-group">
+        <div class="workflow-title">🔐 Authentication <span class="section-badge badge-member">Member</span></div>
+        <div class="test-card" data-id="M-AUTH-01"><div class="test-header" onclick="toggleDetails(this)"><span class="test-id">M-AUTH-01</span><span class="test-name">Member Login — Valid credentials</span><div class="test-status"><select class="status-select" onchange="updateStatus(this)" onclick="event.stopPropagation()"><option value="">—</option><option value="pass">✅ Pass</option><option value="fail">❌ Fail</option><option value="skip">⏭️ Skip</option></select></div></div><div class="test-details"><div class="detail-steps"><ol><li>Open application in browser</li><li>Click "Member Login" button in hero section</li><li>Enter username: <code>member_test</code>, password: <code>test123</code></li><li>Click "Sign In" button</li><li>Verify: Full portal opens with member name "Ananya Dasgupta"</li><li>Verify: Dashboard section is shown with welcome message</li></ol></div><div class="detail-row"><span class="detail-label">Expected:</span> Portal opens, dashboard visible, name displayed</div><textarea class="notes-input" placeholder="Notes..."></textarea></div></div>
+
+        <div class="test-card" data-id="M-AUTH-02"><div class="test-header" onclick="toggleDetails(this)"><span class="test-id">M-AUTH-02</span><span class="test-name">Member Login — Invalid credentials</span><div class="test-status"><select class="status-select" onchange="updateStatus(this)" onclick="event.stopPropagation()"><option value="">—</option><option value="pass">✅ Pass</option><option value="fail">❌ Fail</option><option value="skip">⏭️ Skip</option></select></div></div><div class="test-details"><div class="detail-steps"><ol><li>Open member login modal</li><li>Enter wrong password: <code>member_test</code> / <code>wrong</code></li><li>Click "Sign In"</li><li>Verify: Error message shown, portal does NOT open</li></ol></div><textarea class="notes-input" placeholder="Notes..."></textarea></div></div>
+
+        <div class="test-card" data-id="M-AUTH-03"><div class="test-header" onclick="toggleDetails(this)"><span class="test-id">M-AUTH-03</span><span class="test-name">Member Login — Signup tab navigation</span><div class="test-status"><select class="status-select" onchange="updateStatus(this)" onclick="event.stopPropagation()"><option value="">—</option><option value="pass">✅ Pass</option><option value="fail">❌ Fail</option><option value="skip">⏭️ Skip</option></select></div></div><div class="test-details"><div class="detail-steps"><ol><li>Open member login modal</li><li>Click "Sign Up" tab</li><li>Verify: Registration form appears with fields for name, email, password</li><li>Click "Code" tab</li><li>Verify: Membership code form appears</li></ol></div><textarea class="notes-input" placeholder="Notes..."></textarea></div></div>
+
+        <div class="test-card" data-id="M-AUTH-04"><div class="test-header" onclick="toggleDetails(this)"><span class="test-id">M-AUTH-04</span><span class="test-name">Member Logout</span><div class="test-status"><select class="status-select" onchange="updateStatus(this)" onclick="event.stopPropagation()"><option value="">—</option><option value="pass">✅ Pass</option><option value="fail">❌ Fail</option><option value="skip">⏭️ Skip</option></select></div></div><div class="test-details"><div class="detail-steps"><ol><li>Login as member_test</li><li>Click logout button in portal</li><li>Verify: Portal closes, returns to main page</li><li>Verify: MemberPortal.isLoggedIn is false</li></ol></div><textarea class="notes-input" placeholder="Notes..."></textarea></div></div>
+    </div>
+
+    <div class="workflow-group">
+        <div class="workflow-title">📊 Dashboard & Navigation <span class="section-badge badge-member">Member</span></div>
+        <div class="test-card" data-id="M-DASH-01"><div class="test-header" onclick="toggleDetails(this)"><span class="test-id">M-DASH-01</span><span class="test-name">Dashboard displays member info</span><div class="test-status"><select class="status-select" onchange="updateStatus(this)" onclick="event.stopPropagation()"><option value="">—</option><option value="pass">✅ Pass</option><option value="fail">❌ Fail</option><option value="skip">⏭️ Skip</option></select></div></div><div class="test-details"><div class="detail-steps"><ol><li>Login as member_test</li><li>Verify: Dashboard shows member name, membership type (Family)</li><li>Verify: Quick stats cards are visible</li></ol></div><textarea class="notes-input" placeholder="Notes..."></textarea></div></div>
+
+        <div class="test-card" data-id="M-DASH-02"><div class="test-header" onclick="toggleDetails(this)"><span class="test-id">M-DASH-02</span><span class="test-name">Sidebar navigation works for all sections</span><div class="test-status"><select class="status-select" onchange="updateStatus(this)" onclick="event.stopPropagation()"><option value="">—</option><option value="pass">✅ Pass</option><option value="fail">❌ Fail</option><option value="skip">⏭️ Skip</option></select></div></div><div class="test-details"><div class="detail-steps"><ol><li>Login as member_test</li><li>Click each sidebar nav item: Dashboard, Profile, Family, Payments, Budget, Meetings, Events, Surveys, Directory, Radio, Magazine</li><li>Verify: Each section shows with correct content</li><li>Verify: Active nav highlight moves correctly</li></ol></div><textarea class="notes-input" placeholder="Notes..."></textarea></div></div>
+    </div>
+
+    <div class="workflow-group">
+        <div class="workflow-title">👤 Profile Management <span class="section-badge badge-member">Member</span></div>
+        <div class="test-card" data-id="M-PROF-01"><div class="test-header" onclick="toggleDetails(this)"><span class="test-id">M-PROF-01</span><span class="test-name">Profile section displays member details</span><div class="test-status"><select class="status-select" onchange="updateStatus(this)" onclick="event.stopPropagation()"><option value="">—</option><option value="pass">✅ Pass</option><option value="fail">❌ Fail</option><option value="skip">⏭️ Skip</option></select></div></div><div class="test-details"><div class="detail-steps"><ol><li>Navigate to Profile section</li><li>Verify: Name, email, phone, membership type displayed</li><li>Verify: Edit button is present</li></ol></div><textarea class="notes-input" placeholder="Notes..."></textarea></div></div>
+    </div>
+
+    <div class="workflow-group">
+        <div class="workflow-title">👨‍👩‍👧‍👦 Family Members <span class="section-badge badge-member">Member</span></div>
+        <div class="test-card" data-id="M-FAM-01"><div class="test-header" onclick="toggleDetails(this)"><span class="test-id">M-FAM-01</span><span class="test-name">Family section loads and shows add form</span><div class="test-status"><select class="status-select" onchange="updateStatus(this)" onclick="event.stopPropagation()"><option value="">—</option><option value="pass">✅ Pass</option><option value="fail">❌ Fail</option><option value="skip">⏭️ Skip</option></select></div></div><div class="test-details"><div class="detail-steps"><ol><li>Navigate to Family section</li><li>Verify: Add Family Member form with name, relation, age fields</li><li>Verify: Existing family members table (if any)</li></ol></div><textarea class="notes-input" placeholder="Notes..."></textarea></div></div>
+    </div>
+
+    <div class="workflow-group">
+        <div class="workflow-title">💳 Payments & Budget <span class="section-badge badge-member">Member</span></div>
+        <div class="test-card" data-id="M-PAY-01"><div class="test-header" onclick="toggleDetails(this)"><span class="test-id">M-PAY-01</span><span class="test-name">Payment history section loads</span><div class="test-status"><select class="status-select" onchange="updateStatus(this)" onclick="event.stopPropagation()"><option value="">—</option><option value="pass">✅ Pass</option><option value="fail">❌ Fail</option><option value="skip">⏭️ Skip</option></select></div></div><div class="test-details"><div class="detail-steps"><ol><li>Navigate to Payments section</li><li>Verify: Payment table header visible (Date, Type, Amount, Status)</li><li>Verify: Make Payment button present</li></ol></div><textarea class="notes-input" placeholder="Notes..."></textarea></div></div>
+
+        <div class="test-card" data-id="M-PAY-02"><div class="test-header" onclick="toggleDetails(this)"><span class="test-id">M-PAY-02</span><span class="test-name">Budget section displays community budget</span><div class="test-status"><select class="status-select" onchange="updateStatus(this)" onclick="event.stopPropagation()"><option value="">—</option><option value="pass">✅ Pass</option><option value="fail">❌ Fail</option><option value="skip">⏭️ Skip</option></select></div></div><div class="test-details"><div class="detail-steps"><ol><li>Navigate to Budget section</li><li>Verify: Budget overview with income/expense categories</li></ol></div><textarea class="notes-input" placeholder="Notes..."></textarea></div></div>
+    </div>
+
+    <div class="workflow-group">
+        <div class="workflow-title">🎉 Events & RSVP (Enhanced) <span class="section-badge badge-member">Member</span> <span class="section-badge badge-evite">RSVP</span></div>
+        <div class="test-card" data-id="M-EVT-01"><div class="test-header" onclick="toggleDetails(this)"><span class="test-id">M-EVT-01</span><span class="test-name">Events section shows upcoming events</span><div class="test-status"><select class="status-select" onchange="updateStatus(this)" onclick="event.stopPropagation()"><option value="">—</option><option value="pass">✅ Pass</option><option value="fail">❌ Fail</option><option value="skip">⏭️ Skip</option></select></div></div><div class="test-details"><div class="detail-steps"><ol><li>Navigate to Events section</li><li>Verify: Nabo Borsho, Summer Camp, Summer Picnic cards visible</li><li>Verify: RSVP Now buttons present for active events</li></ol></div><textarea class="notes-input" placeholder="Notes..."></textarea></div></div>
+
+        <div class="test-card" data-id="M-EVT-02"><div class="test-header" onclick="toggleDetails(this)"><span class="test-id">M-EVT-02</span><span class="test-name">RSVP form opens with adult/kid/dietary fields</span><div class="test-status"><select class="status-select" onchange="updateStatus(this)" onclick="event.stopPropagation()"><option value="">—</option><option value="pass">✅ Pass</option><option value="fail">❌ Fail</option><option value="skip">⏭️ Skip</option></select></div></div><div class="test-details"><div class="detail-steps"><ol><li>Click "RSVP Now" on Nabo Borsho event</li><li>Verify: RSVP form appears at top of page</li><li>Verify: Fields present — Status (Attending/Maybe/Declined), # Adults, # Kids, Dietary Requirements, Notes</li></ol></div><textarea class="notes-input" placeholder="Notes..."></textarea></div></div>
+
+        <div class="test-card" data-id="M-EVT-03"><div class="test-header" onclick="toggleDetails(this)"><span class="test-id">M-EVT-03</span><span class="test-name">Submit RSVP with dietary requirements</span><div class="test-status"><select class="status-select" onchange="updateStatus(this)" onclick="event.stopPropagation()"><option value="">—</option><option value="pass">✅ Pass</option><option value="fail">❌ Fail</option><option value="skip">⏭️ Skip</option></select></div></div><div class="test-details"><div class="detail-steps"><ol><li>Open RSVP form for Nabo Borsho</li><li>Select "Yes, I'll attend"</li><li>Set Adults=2, Kids=1</li><li>Select Dietary: Vegetarian</li><li>Add note: "Please seat us near stage"</li><li>Click Submit RSVP</li><li>Verify: Success confirmation alert with details</li><li>Verify: "My RSVPs" table shows the submitted RSVP</li></ol></div><textarea class="notes-input" placeholder="Notes..."></textarea></div></div>
+
+        <div class="test-card" data-id="M-EVT-04"><div class="test-header" onclick="toggleDetails(this)"><span class="test-id">M-EVT-04</span><span class="test-name">Edit existing RSVP</span><div class="test-status"><select class="status-select" onchange="updateStatus(this)" onclick="event.stopPropagation()"><option value="">—</option><option value="pass">✅ Pass</option><option value="fail">❌ Fail</option><option value="skip">⏭️ Skip</option></select></div></div><div class="test-details"><div class="detail-steps"><ol><li>After submitting an RSVP, find it in "My RSVPs" table</li><li>Click "Edit" button</li><li>Change status to "Maybe", update kid count</li><li>Re-submit</li><li>Verify: RSVP updated in table</li></ol></div><textarea class="notes-input" placeholder="Notes..."></textarea></div></div>
+    </div>
+
+    <div class="workflow-group">
+        <div class="workflow-title">📊 Surveys & Directory <span class="section-badge badge-member">Member</span></div>
+        <div class="test-card" data-id="M-SUR-01"><div class="test-header" onclick="toggleDetails(this)"><span class="test-id">M-SUR-01</span><span class="test-name">Surveys section shows active surveys</span><div class="test-status"><select class="status-select" onchange="updateStatus(this)" onclick="event.stopPropagation()"><option value="">—</option><option value="pass">✅ Pass</option><option value="fail">❌ Fail</option><option value="skip">⏭️ Skip</option></select></div></div><div class="test-details"><div class="detail-steps"><ol><li>Navigate to Surveys section</li><li>Verify: Active surveys listed (Menu Preferences, Summer Camp Interest)</li><li>Verify: "Take Survey" buttons present</li></ol></div><textarea class="notes-input" placeholder="Notes..."></textarea></div></div>
+
+        <div class="test-card" data-id="M-DIR-01"><div class="test-header" onclick="toggleDetails(this)"><span class="test-id">M-DIR-01</span><span class="test-name">Directory search works</span><div class="test-status"><select class="status-select" onchange="updateStatus(this)" onclick="event.stopPropagation()"><option value="">—</option><option value="pass">✅ Pass</option><option value="fail">❌ Fail</option><option value="skip">⏭️ Skip</option></select></div></div><div class="test-details"><div class="detail-steps"><ol><li>Navigate to Directory section</li><li>Verify: Search box present</li><li>Enter a search term, click Search</li><li>Verify: Results displayed (demo alert)</li></ol></div><textarea class="notes-input" placeholder="Notes..."></textarea></div></div>
+    </div>
+
+    <div class="workflow-group">
+        <div class="workflow-title">📻 Radio & Magazine <span class="section-badge badge-member">Member</span> <span class="section-badge badge-radio">Radio</span></div>
+        <div class="test-card" data-id="M-RAD-01"><div class="test-header" onclick="toggleDetails(this)"><span class="test-id">M-RAD-01</span><span class="test-name">Radio section shows player interface</span><div class="test-status"><select class="status-select" onchange="updateStatus(this)" onclick="event.stopPropagation()"><option value="">—</option><option value="pass">✅ Pass</option><option value="fail">❌ Fail</option><option value="skip">⏭️ Skip</option></select></div></div><div class="test-details"><div class="detail-steps"><ol><li>Navigate to Radio section</li><li>Verify: Radio player UI with play/pause controls</li><li>Verify: Program schedule display</li></ol></div><textarea class="notes-input" placeholder="Notes..."></textarea></div></div>
+
+        <div class="test-card" data-id="M-MAG-01"><div class="test-header" onclick="toggleDetails(this)"><span class="test-id">M-MAG-01</span><span class="test-name">Magazine section loads</span><div class="test-status"><select class="status-select" onchange="updateStatus(this)" onclick="event.stopPropagation()"><option value="">—</option><option value="pass">✅ Pass</option><option value="fail">❌ Fail</option><option value="skip">⏭️ Skip</option></select></div></div><div class="test-details"><div class="detail-steps"><ol><li>Navigate to Magazine section</li><li>Verify: Magazine content/articles visible</li></ol></div><textarea class="notes-input" placeholder="Notes..."></textarea></div></div>
+    </div>
+</div>
+
+<!-- ==================== ADMIN TAB ==================== -->
+<div class="tab-content" id="tab-admin">
+    <div class="cred-box">
+        <h4>🔑 Full Admin Account</h4>
+        <p>Login: <code>admin_test</code> / <code>admin123</code> — Ranadhir Basu (President, full access)</p>
+    </div>
+
+    <div class="workflow-group">
+        <div class="workflow-title">🔐 Admin Authentication <span class="section-badge badge-admin">Admin</span></div>
+        <div class="test-card" data-id="A-AUTH-01"><div class="test-header" onclick="toggleDetails(this)"><span class="test-id">A-AUTH-01</span><span class="test-name">Admin Login — Valid credentials</span><div class="test-status"><select class="status-select" onchange="updateStatus(this)" onclick="event.stopPropagation()"><option value="">—</option><option value="pass">✅ Pass</option><option value="fail">❌ Fail</option><option value="skip">⏭️ Skip</option></select></div></div><div class="test-details"><div class="detail-steps"><ol><li>Click "Admin Login" (in About section or footer)</li><li>Enter: <code>admin_test</code> / <code>admin123</code></li><li>Click Login</li><li>Verify: Admin portal opens with dashboard</li><li>Verify: All sidebar nav items visible</li></ol></div><textarea class="notes-input" placeholder="Notes..."></textarea></div></div>
+
+        <div class="test-card" data-id="A-AUTH-02"><div class="test-header" onclick="toggleDetails(this)"><span class="test-id">A-AUTH-02</span><span class="test-name">Admin Login — Invalid credentials rejected</span><div class="test-status"><select class="status-select" onchange="updateStatus(this)" onclick="event.stopPropagation()"><option value="">—</option><option value="pass">✅ Pass</option><option value="fail">❌ Fail</option><option value="skip">⏭️ Skip</option></select></div></div><div class="test-details"><div class="detail-steps"><ol><li>Open admin login modal</li><li>Enter wrong credentials</li><li>Verify: Error message, portal does NOT open</li></ol></div><textarea class="notes-input" placeholder="Notes..."></textarea></div></div>
+
+        <div class="test-card" data-id="A-AUTH-03"><div class="test-header" onclick="toggleDetails(this)"><span class="test-id">A-AUTH-03</span><span class="test-name">Admin Logout</span><div class="test-status"><select class="status-select" onchange="updateStatus(this)" onclick="event.stopPropagation()"><option value="">—</option><option value="pass">✅ Pass</option><option value="fail">❌ Fail</option><option value="skip">⏭️ Skip</option></select></div></div><div class="test-details"><div class="detail-steps"><ol><li>Login as admin, click Logout</li><li>Verify: Admin portal closes, returns to main page</li></ol></div><textarea class="notes-input" placeholder="Notes..."></textarea></div></div>
+    </div>
+
+    <div class="workflow-group">
+        <div class="workflow-title">📊 Dashboard & Navigation <span class="section-badge badge-admin">Admin</span></div>
+        <div class="test-card" data-id="A-DASH-01"><div class="test-header" onclick="toggleDetails(this)"><span class="test-id">A-DASH-01</span><span class="test-name">Dashboard shows stats cards</span><div class="test-status"><select class="status-select" onchange="updateStatus(this)" onclick="event.stopPropagation()"><option value="">—</option><option value="pass">✅ Pass</option><option value="fail">❌ Fail</option><option value="skip">⏭️ Skip</option></select></div></div><div class="test-details"><div class="detail-steps"><ol><li>Login as admin</li><li>Verify: Dashboard shows stat cards (Total Members, Active, Payments, Events)</li></ol></div><textarea class="notes-input" placeholder="Notes..."></textarea></div></div>
+
+        <div class="test-card" data-id="A-DASH-02"><div class="test-header" onclick="toggleDetails(this)"><span class="test-id">A-DASH-02</span><span class="test-name">All admin sidebar sections navigate correctly</span><div class="test-status"><select class="status-select" onchange="updateStatus(this)" onclick="event.stopPropagation()"><option value="">—</option><option value="pass">✅ Pass</option><option value="fail">❌ Fail</option><option value="skip">⏭️ Skip</option></select></div></div><div class="test-details"><div class="detail-steps"><ol><li>Click each sidebar nav: Dashboard, Members, Payments, Events, RSVPs, Evite, Data Import, Complaints, Surveys, Announcements, Radio, Magazine, Budget, Vendors, Volunteers, Meetings</li><li>Verify: Each section loads without error</li><li>Verify: Active nav highlight moves</li></ol></div><textarea class="notes-input" placeholder="Notes..."></textarea></div></div>
+    </div>
+
+    <div class="workflow-group">
+        <div class="workflow-title">👥 Member Management <span class="section-badge badge-admin">Admin</span></div>
+        <div class="test-card" data-id="A-MEM-01"><div class="test-header" onclick="toggleDetails(this)"><span class="test-id">A-MEM-01</span><span class="test-name">Members section shows member list table</span><div class="test-status"><select class="status-select" onchange="updateStatus(this)" onclick="event.stopPropagation()"><option value="">—</option><option value="pass">✅ Pass</option><option value="fail">❌ Fail</option><option value="skip">⏭️ Skip</option></select></div></div><div class="test-details"><div class="detail-steps"><ol><li>Navigate to Members section</li><li>Verify: Member table with Name, Email, Type, Status columns</li><li>Verify: Search/filter controls available</li></ol></div><textarea class="notes-input" placeholder="Notes..."></textarea></div></div>
+    </div>
+
+    <div class="workflow-group">
+        <div class="workflow-title">💰 Payments & Budget <span class="section-badge badge-admin">Admin</span></div>
+        <div class="test-card" data-id="A-PAY-01"><div class="test-header" onclick="toggleDetails(this)"><span class="test-id">A-PAY-01</span><span class="test-name">Payments section shows payment records</span><div class="test-status"><select class="status-select" onchange="updateStatus(this)" onclick="event.stopPropagation()"><option value="">—</option><option value="pass">✅ Pass</option><option value="fail">❌ Fail</option><option value="skip">⏭️ Skip</option></select></div></div><div class="test-details"><div class="detail-steps"><ol><li>Navigate to Payments section</li><li>Verify: Payment records table with Amount, Member, Date, Status</li></ol></div><textarea class="notes-input" placeholder="Notes..."></textarea></div></div>
+
+        <div class="test-card" data-id="A-BUD-01"><div class="test-header" onclick="toggleDetails(this)"><span class="test-id">A-BUD-01</span><span class="test-name">Budget section loads with categories</span><div class="test-status"><select class="status-select" onchange="updateStatus(this)" onclick="event.stopPropagation()"><option value="">—</option><option value="pass">✅ Pass</option><option value="fail">❌ Fail</option><option value="skip">⏭️ Skip</option></select></div></div><div class="test-details"><div class="detail-steps"><ol><li>Navigate to Budget section</li><li>Verify: Budget breakdown visible</li></ol></div><textarea class="notes-input" placeholder="Notes..."></textarea></div></div>
+    </div>
+
+    <div class="workflow-group">
+        <div class="workflow-title">📢 Communications <span class="section-badge badge-admin">Admin</span></div>
+        <div class="test-card" data-id="A-ANN-01"><div class="test-header" onclick="toggleDetails(this)"><span class="test-id">A-ANN-01</span><span class="test-name">Announcements section loads</span><div class="test-status"><select class="status-select" onchange="updateStatus(this)" onclick="event.stopPropagation()"><option value="">—</option><option value="pass">✅ Pass</option><option value="fail">❌ Fail</option><option value="skip">⏭️ Skip</option></select></div></div><div class="test-details"><div class="detail-steps"><ol><li>Navigate to Announcements</li><li>Verify: Announcement list visible</li></ol></div><textarea class="notes-input" placeholder="Notes..."></textarea></div></div>
+
+        <div class="test-card" data-id="A-CMP-01"><div class="test-header" onclick="toggleDetails(this)"><span class="test-id">A-CMP-01</span><span class="test-name">Complaints section loads</span><div class="test-status"><select class="status-select" onchange="updateStatus(this)" onclick="event.stopPropagation()"><option value="">—</option><option value="pass">✅ Pass</option><option value="fail">❌ Fail</option><option value="skip">⏭️ Skip</option></select></div></div><div class="test-details"><div class="detail-steps"><ol><li>Navigate to Complaints</li><li>Verify: Complaints table visible</li></ol></div><textarea class="notes-input" placeholder="Notes..."></textarea></div></div>
+
+        <div class="test-card" data-id="A-SUR-01"><div class="test-header" onclick="toggleDetails(this)"><span class="test-id">A-SUR-01</span><span class="test-name">Surveys management section loads</span><div class="test-status"><select class="status-select" onchange="updateStatus(this)" onclick="event.stopPropagation()"><option value="">—</option><option value="pass">✅ Pass</option><option value="fail">❌ Fail</option><option value="skip">⏭️ Skip</option></select></div></div><div class="test-details"><div class="detail-steps"><ol><li>Navigate to Surveys</li><li>Verify: Survey management UI visible</li></ol></div><textarea class="notes-input" placeholder="Notes..."></textarea></div></div>
+    </div>
+
+    <div class="workflow-group">
+        <div class="workflow-title">🤝 Vendors, Volunteers, Meetings <span class="section-badge badge-admin">Admin</span></div>
+        <div class="test-card" data-id="A-VEN-01"><div class="test-header" onclick="toggleDetails(this)"><span class="test-id">A-VEN-01</span><span class="test-name">Vendors section loads</span><div class="test-status"><select class="status-select" onchange="updateStatus(this)" onclick="event.stopPropagation()"><option value="">—</option><option value="pass">✅ Pass</option><option value="fail">❌ Fail</option><option value="skip">⏭️ Skip</option></select></div></div><div class="test-details"><div class="detail-steps"><ol><li>Navigate to Vendors section</li><li>Verify: Vendor list visible</li></ol></div><textarea class="notes-input" placeholder="Notes..."></textarea></div></div>
+
+        <div class="test-card" data-id="A-VOL-01"><div class="test-header" onclick="toggleDetails(this)"><span class="test-id">A-VOL-01</span><span class="test-name">Volunteers section loads</span><div class="test-status"><select class="status-select" onchange="updateStatus(this)" onclick="event.stopPropagation()"><option value="">—</option><option value="pass">✅ Pass</option><option value="fail">❌ Fail</option><option value="skip">⏭️ Skip</option></select></div></div><div class="test-details"><div class="detail-steps"><ol><li>Navigate to Volunteers section</li><li>Verify: Volunteer management UI visible</li></ol></div><textarea class="notes-input" placeholder="Notes..."></textarea></div></div>
+
+        <div class="test-card" data-id="A-MTG-01"><div class="test-header" onclick="toggleDetails(this)"><span class="test-id">A-MTG-01</span><span class="test-name">Meetings section loads</span><div class="test-status"><select class="status-select" onchange="updateStatus(this)" onclick="event.stopPropagation()"><option value="">—</option><option value="pass">✅ Pass</option><option value="fail">❌ Fail</option><option value="skip">⏭️ Skip</option></select></div></div><div class="test-details"><div class="detail-steps"><ol><li>Navigate to Meetings section</li><li>Verify: Meeting schedule/management UI visible</li></ol></div><textarea class="notes-input" placeholder="Notes..."></textarea></div></div>
+    </div>
+</div>
+
+<!-- ==================== EC: EVENTS TAB ==================== -->
+<div class="tab-content" id="tab-ec-events">
+    <div class="cred-box">
+        <h4>🎯 EC: Event Coordinator</h4>
+        <p>Login: <code>ec_events</code> / <code>events123</code> — Priya Sen | Sections: Events, RSVPs, Evite, Volunteers</p>
+    </div>
+
+    <div class="workflow-group">
+        <div class="workflow-title">🔐 EC Login & Access <span class="section-badge badge-ec">EC-Events</span></div>
+        <div class="test-card" data-id="EC-EV-01"><div class="test-header" onclick="toggleDetails(this)"><span class="test-id">EC-EV-01</span><span class="test-name">EC Events login shows admin portal</span><div class="test-status"><select class="status-select" onchange="updateStatus(this)" onclick="event.stopPropagation()"><option value="">—</option><option value="pass">✅ Pass</option><option value="fail">❌ Fail</option><option value="skip">⏭️ Skip</option></select></div></div><div class="test-details"><div class="detail-steps"><ol><li>Open admin login, enter <code>ec_events</code> / <code>events123</code></li><li>Verify: Admin portal opens with name "Priya Sen"</li><li>Verify: Dashboard section visible</li></ol></div><textarea class="notes-input" placeholder="Notes..."></textarea></div></div>
+
+        <div class="test-card" data-id="EC-EV-02"><div class="test-header" onclick="toggleDetails(this)"><span class="test-id">EC-EV-02</span><span class="test-name">Can access Events section</span><div class="test-status"><select class="status-select" onchange="updateStatus(this)" onclick="event.stopPropagation()"><option value="">—</option><option value="pass">✅ Pass</option><option value="fail">❌ Fail</option><option value="skip">⏭️ Skip</option></select></div></div><div class="test-details"><div class="detail-steps"><ol><li>Click Events in sidebar</li><li>Verify: Events section loads with event cards</li></ol></div><textarea class="notes-input" placeholder="Notes..."></textarea></div></div>
+
+        <div class="test-card" data-id="EC-EV-03"><div class="test-header" onclick="toggleDetails(this)"><span class="test-id">EC-EV-03</span><span class="test-name">Can access RSVPs section</span><div class="test-status"><select class="status-select" onchange="updateStatus(this)" onclick="event.stopPropagation()"><option value="">—</option><option value="pass">✅ Pass</option><option value="fail">❌ Fail</option><option value="skip">⏭️ Skip</option></select></div></div><div class="test-details"><div class="detail-steps"><ol><li>Click RSVPs in sidebar</li><li>Verify: RSVPs section with RSVP table, stats</li></ol></div><textarea class="notes-input" placeholder="Notes..."></textarea></div></div>
+
+        <div class="test-card" data-id="EC-EV-04"><div class="test-header" onclick="toggleDetails(this)"><span class="test-id">EC-EV-04</span><span class="test-name">Can access Evite section</span><div class="test-status"><select class="status-select" onchange="updateStatus(this)" onclick="event.stopPropagation()"><option value="">—</option><option value="pass">✅ Pass</option><option value="fail">❌ Fail</option><option value="skip">⏭️ Skip</option></select></div></div><div class="test-details"><div class="detail-steps"><ol><li>Click "Evite / Invitations" in sidebar</li><li>Verify: Evite section loads with sent invitations</li></ol></div><textarea class="notes-input" placeholder="Notes..."></textarea></div></div>
+
+        <div class="test-card" data-id="EC-EV-05"><div class="test-header" onclick="toggleDetails(this)"><span class="test-id">EC-EV-05</span><span class="test-name">Can access Volunteers section</span><div class="test-status"><select class="status-select" onchange="updateStatus(this)" onclick="event.stopPropagation()"><option value="">—</option><option value="pass">✅ Pass</option><option value="fail">❌ Fail</option><option value="skip">⏭️ Skip</option></select></div></div><div class="test-details"><div class="detail-steps"><ol><li>Click Volunteers in sidebar</li><li>Verify: Volunteers section loads</li></ol></div><textarea class="notes-input" placeholder="Notes..."></textarea></div></div>
+    </div>
+</div>
+
+<!-- ==================== EC: SPONSORSHIP TAB ==================== -->
+<div class="tab-content" id="tab-ec-sponsorship">
+    <div class="cred-box">
+        <h4>💰 EC: Sponsorship Manager</h4>
+        <p>Login: <code>ec_sponsorship</code> / <code>sponsor123</code> — Amit Roy | Sections: Vendors, Budget</p>
+    </div>
+    <div class="workflow-group">
+        <div class="workflow-title">🔐 EC Sponsorship Login & Access <span class="section-badge badge-ec">EC-Sponsor</span></div>
+        <div class="test-card" data-id="EC-SP-01"><div class="test-header" onclick="toggleDetails(this)"><span class="test-id">EC-SP-01</span><span class="test-name">Login as ec_sponsorship succeeds</span><div class="test-status"><select class="status-select" onchange="updateStatus(this)" onclick="event.stopPropagation()"><option value="">—</option><option value="pass">✅ Pass</option><option value="fail">❌ Fail</option><option value="skip">⏭️ Skip</option></select></div></div><div class="test-details"><div class="detail-steps"><ol><li>Login with <code>ec_sponsorship</code> / <code>sponsor123</code></li><li>Verify: Admin portal opens, name "Amit Roy"</li></ol></div><textarea class="notes-input" placeholder="Notes..."></textarea></div></div>
+        <div class="test-card" data-id="EC-SP-02"><div class="test-header" onclick="toggleDetails(this)"><span class="test-id">EC-SP-02</span><span class="test-name">Can access Vendors section</span><div class="test-status"><select class="status-select" onchange="updateStatus(this)" onclick="event.stopPropagation()"><option value="">—</option><option value="pass">✅ Pass</option><option value="fail">❌ Fail</option><option value="skip">⏭️ Skip</option></select></div></div><div class="test-details"><ol><li>Navigate to Vendors section</li><li>Verify: Vendor list loads</li></ol><textarea class="notes-input" placeholder="Notes..."></textarea></div></div>
+        <div class="test-card" data-id="EC-SP-03"><div class="test-header" onclick="toggleDetails(this)"><span class="test-id">EC-SP-03</span><span class="test-name">Can access Budget section</span><div class="test-status"><select class="status-select" onchange="updateStatus(this)" onclick="event.stopPropagation()"><option value="">—</option><option value="pass">✅ Pass</option><option value="fail">❌ Fail</option><option value="skip">⏭️ Skip</option></select></div></div><div class="test-details"><ol><li>Navigate to Budget section</li><li>Verify: Budget data visible</li></ol><textarea class="notes-input" placeholder="Notes..."></textarea></div></div>
+    </div>
+</div>
+
+<!-- ==================== EC: MEMBERS TAB ==================== -->
+<div class="tab-content" id="tab-ec-members">
+    <div class="cred-box">
+        <h4>📋 EC: Secretary (Member Management)</h4>
+        <p>Login: <code>ec_members</code> / <code>members123</code> — Shreya Das | Sections: Members, Meetings, Directory</p>
+    </div>
+    <div class="workflow-group">
+        <div class="workflow-title">🔐 EC Secretary Login & Access <span class="section-badge badge-ec">EC-Members</span></div>
+        <div class="test-card" data-id="EC-MB-01"><div class="test-header" onclick="toggleDetails(this)"><span class="test-id">EC-MB-01</span><span class="test-name">Login as ec_members succeeds</span><div class="test-status"><select class="status-select" onchange="updateStatus(this)" onclick="event.stopPropagation()"><option value="">—</option><option value="pass">✅ Pass</option><option value="fail">❌ Fail</option><option value="skip">⏭️ Skip</option></select></div></div><div class="test-details"><ol><li>Login with <code>ec_members</code> / <code>members123</code></li><li>Verify: Name "Shreya Das"</li></ol><textarea class="notes-input" placeholder="Notes..."></textarea></div></div>
+        <div class="test-card" data-id="EC-MB-02"><div class="test-header" onclick="toggleDetails(this)"><span class="test-id">EC-MB-02</span><span class="test-name">Can access Members section</span><div class="test-status"><select class="status-select" onchange="updateStatus(this)" onclick="event.stopPropagation()"><option value="">—</option><option value="pass">✅ Pass</option><option value="fail">❌ Fail</option><option value="skip">⏭️ Skip</option></select></div></div><div class="test-details"><ol><li>Navigate to Members section</li></ol><textarea class="notes-input" placeholder="Notes..."></textarea></div></div>
+        <div class="test-card" data-id="EC-MB-03"><div class="test-header" onclick="toggleDetails(this)"><span class="test-id">EC-MB-03</span><span class="test-name">Can access Meetings section</span><div class="test-status"><select class="status-select" onchange="updateStatus(this)" onclick="event.stopPropagation()"><option value="">—</option><option value="pass">✅ Pass</option><option value="fail">❌ Fail</option><option value="skip">⏭️ Skip</option></select></div></div><div class="test-details"><ol><li>Navigate to Meetings section</li></ol><textarea class="notes-input" placeholder="Notes..."></textarea></div></div>
+    </div>
+</div>
+
+<!-- ==================== EC: VENDORS TAB ==================== -->
+<div class="tab-content" id="tab-ec-vendors">
+    <div class="cred-box">
+        <h4>🍽️ EC: Vendor Coordinator</h4>
+        <p>Login: <code>ec_vendors</code> / <code>vendor123</code> — Rina Mukherjee | Sections: Vendors, Events</p>
+    </div>
+    <div class="workflow-group">
+        <div class="workflow-title">🔐 EC Vendor Login & Access <span class="section-badge badge-ec">EC-Vendor</span></div>
+        <div class="test-card" data-id="EC-VD-01"><div class="test-header" onclick="toggleDetails(this)"><span class="test-id">EC-VD-01</span><span class="test-name">Login as ec_vendors succeeds</span><div class="test-status"><select class="status-select" onchange="updateStatus(this)" onclick="event.stopPropagation()"><option value="">—</option><option value="pass">✅ Pass</option><option value="fail">❌ Fail</option><option value="skip">⏭️ Skip</option></select></div></div><div class="test-details"><ol><li>Login with <code>ec_vendors</code> / <code>vendor123</code></li><li>Verify: Name "Rina Mukherjee"</li></ol><textarea class="notes-input" placeholder="Notes..."></textarea></div></div>
+        <div class="test-card" data-id="EC-VD-02"><div class="test-header" onclick="toggleDetails(this)"><span class="test-id">EC-VD-02</span><span class="test-name">Can access Vendors and Events</span><div class="test-status"><select class="status-select" onchange="updateStatus(this)" onclick="event.stopPropagation()"><option value="">—</option><option value="pass">✅ Pass</option><option value="fail">❌ Fail</option><option value="skip">⏭️ Skip</option></select></div></div><div class="test-details"><ol><li>Navigate to Vendors → loads</li><li>Navigate to Events → loads</li></ol><textarea class="notes-input" placeholder="Notes..."></textarea></div></div>
+    </div>
+</div>
+
+<!-- ==================== EC: ACCOUNTS TAB ==================== -->
+<div class="tab-content" id="tab-ec-accounts">
+    <div class="cred-box">
+        <h4>🏦 EC: Treasurer (Accounts)</h4>
+        <p>Login: <code>ec_accounts</code> / <code>accounts123</code> — Subir Ghosh | Sections: Payments, Budget, Vendors</p>
+    </div>
+    <div class="workflow-group">
+        <div class="workflow-title">🔐 EC Treasurer Login & Access <span class="section-badge badge-ec">EC-Accounts</span></div>
+        <div class="test-card" data-id="EC-AC-01"><div class="test-header" onclick="toggleDetails(this)"><span class="test-id">EC-AC-01</span><span class="test-name">Login as ec_accounts succeeds</span><div class="test-status"><select class="status-select" onchange="updateStatus(this)" onclick="event.stopPropagation()"><option value="">—</option><option value="pass">✅ Pass</option><option value="fail">❌ Fail</option><option value="skip">⏭️ Skip</option></select></div></div><div class="test-details"><ol><li>Login with <code>ec_accounts</code> / <code>accounts123</code></li><li>Verify: Name "Subir Ghosh"</li></ol><textarea class="notes-input" placeholder="Notes..."></textarea></div></div>
+        <div class="test-card" data-id="EC-AC-02"><div class="test-header" onclick="toggleDetails(this)"><span class="test-id">EC-AC-02</span><span class="test-name">Can access Payments, Budget, Vendors</span><div class="test-status"><select class="status-select" onchange="updateStatus(this)" onclick="event.stopPropagation()"><option value="">—</option><option value="pass">✅ Pass</option><option value="fail">❌ Fail</option><option value="skip">⏭️ Skip</option></select></div></div><div class="test-details"><ol><li>Navigate to Payments → loads</li><li>Navigate to Budget → loads</li><li>Navigate to Vendors → loads</li></ol><textarea class="notes-input" placeholder="Notes..."></textarea></div></div>
+    </div>
+</div>
+
+<!-- ==================== EC: PAYMENTS TAB ==================== -->
+<div class="tab-content" id="tab-ec-payments">
+    <div class="cred-box">
+        <h4>💳 EC: Asst. Treasurer (Payments)</h4>
+        <p>Login: <code>ec_payments</code> / <code>payment123</code> — Deepa Banerjee | Sections: Payments only</p>
+    </div>
+    <div class="workflow-group">
+        <div class="workflow-title">🔐 EC Asst Treasurer Login & Access <span class="section-badge badge-ec">EC-Payments</span></div>
+        <div class="test-card" data-id="EC-PY-01"><div class="test-header" onclick="toggleDetails(this)"><span class="test-id">EC-PY-01</span><span class="test-name">Login as ec_payments succeeds</span><div class="test-status"><select class="status-select" onchange="updateStatus(this)" onclick="event.stopPropagation()"><option value="">—</option><option value="pass">✅ Pass</option><option value="fail">❌ Fail</option><option value="skip">⏭️ Skip</option></select></div></div><div class="test-details"><ol><li>Login with <code>ec_payments</code> / <code>payment123</code></li><li>Verify: Name "Deepa Banerjee"</li></ol><textarea class="notes-input" placeholder="Notes..."></textarea></div></div>
+        <div class="test-card" data-id="EC-PY-02"><div class="test-header" onclick="toggleDetails(this)"><span class="test-id">EC-PY-02</span><span class="test-name">Can access Payments section only</span><div class="test-status"><select class="status-select" onchange="updateStatus(this)" onclick="event.stopPropagation()"><option value="">—</option><option value="pass">✅ Pass</option><option value="fail">❌ Fail</option><option value="skip">⏭️ Skip</option></select></div></div><div class="test-details"><ol><li>Navigate to Payments → loads</li><li>Verify: Other sections restricted</li></ol><textarea class="notes-input" placeholder="Notes..."></textarea></div></div>
+    </div>
+</div>
+
+<!-- ==================== EC: COMMS TAB ==================== -->
+<div class="tab-content" id="tab-ec-comms">
+    <div class="cred-box">
+        <h4>📢 EC: Communications</h4>
+        <p>Login: <code>ec_comms</code> / <code>comms123</code> — Tanmay Chatterjee | Sections: Announcements, Surveys, Complaints, Magazine</p>
+    </div>
+    <div class="workflow-group">
+        <div class="workflow-title">🔐 EC Comms Login & Access <span class="section-badge badge-ec">EC-Comms</span></div>
+        <div class="test-card" data-id="EC-CM-01"><div class="test-header" onclick="toggleDetails(this)"><span class="test-id">EC-CM-01</span><span class="test-name">Login as ec_comms succeeds</span><div class="test-status"><select class="status-select" onchange="updateStatus(this)" onclick="event.stopPropagation()"><option value="">—</option><option value="pass">✅ Pass</option><option value="fail">❌ Fail</option><option value="skip">⏭️ Skip</option></select></div></div><div class="test-details"><ol><li>Login with <code>ec_comms</code> / <code>comms123</code></li><li>Verify: Name "Tanmay Chatterjee"</li></ol><textarea class="notes-input" placeholder="Notes..."></textarea></div></div>
+        <div class="test-card" data-id="EC-CM-02"><div class="test-header" onclick="toggleDetails(this)"><span class="test-id">EC-CM-02</span><span class="test-name">Can access Announcements, Surveys, Complaints, Magazine</span><div class="test-status"><select class="status-select" onchange="updateStatus(this)" onclick="event.stopPropagation()"><option value="">—</option><option value="pass">✅ Pass</option><option value="fail">❌ Fail</option><option value="skip">⏭️ Skip</option></select></div></div><div class="test-details"><ol><li>Navigate to each permitted section</li><li>Verify: All 4 sections load correctly</li></ol><textarea class="notes-input" placeholder="Notes..."></textarea></div></div>
+    </div>
+</div>
+
+<!-- ==================== EC: ADS TAB ==================== -->
+<div class="tab-content" id="tab-ec-ads">
+    <div class="cred-box">
+        <h4>📰 EC: Ad Manager</h4>
+        <p>Login: <code>ec_ads</code> / <code>ads123</code> — Mousumi Basu | Sections: Vendors, Announcements</p>
+    </div>
+    <div class="workflow-group">
+        <div class="workflow-title">🔐 EC Ads Login & Access <span class="section-badge badge-ec">EC-Ads</span></div>
+        <div class="test-card" data-id="EC-AD-01"><div class="test-header" onclick="toggleDetails(this)"><span class="test-id">EC-AD-01</span><span class="test-name">Login as ec_ads succeeds</span><div class="test-status"><select class="status-select" onchange="updateStatus(this)" onclick="event.stopPropagation()"><option value="">—</option><option value="pass">✅ Pass</option><option value="fail">❌ Fail</option><option value="skip">⏭️ Skip</option></select></div></div><div class="test-details"><ol><li>Login with <code>ec_ads</code> / <code>ads123</code></li><li>Verify: Name "Mousumi Basu"</li></ol><textarea class="notes-input" placeholder="Notes..."></textarea></div></div>
+        <div class="test-card" data-id="EC-AD-02"><div class="test-header" onclick="toggleDetails(this)"><span class="test-id">EC-AD-02</span><span class="test-name">Can access Vendors and Announcements</span><div class="test-status"><select class="status-select" onchange="updateStatus(this)" onclick="event.stopPropagation()"><option value="">—</option><option value="pass">✅ Pass</option><option value="fail">❌ Fail</option><option value="skip">⏭️ Skip</option></select></div></div><div class="test-details"><ol><li>Navigate to Vendors → loads</li><li>Navigate to Announcements → loads</li></ol><textarea class="notes-input" placeholder="Notes..."></textarea></div></div>
+    </div>
+</div>
+
+<!-- ==================== EVITE TAB ==================== -->
+<div class="tab-content" id="tab-evite">
+    <div class="cred-box">
+        <h4>📨 Evite Integration Testing</h4>
+        <p>Use admin or EC Events account: <code>admin_test</code> / <code>admin123</code> OR <code>ec_events</code> / <code>events123</code></p>
+    </div>
+
+    <div class="workflow-group">
+        <div class="workflow-title">📨 Send Invitations <span class="section-badge badge-evite">Evite</span></div>
+        <div class="test-card" data-id="EV-SEND-01"><div class="test-header" onclick="toggleDetails(this)"><span class="test-id">EV-SEND-01</span><span class="test-name">Open Send Evite form</span><div class="test-status"><select class="status-select" onchange="updateStatus(this)" onclick="event.stopPropagation()"><option value="">—</option><option value="pass">✅ Pass</option><option value="fail">❌ Fail</option><option value="skip">⏭️ Skip</option></select></div></div><div class="test-details"><div class="detail-steps"><ol><li>Login as admin, navigate to Evite section</li><li>Click "Send New Evite" button</li><li>Verify: Compose Invitation form appears with all fields</li></ol></div><textarea class="notes-input" placeholder="Notes..."></textarea></div></div>
+
+        <div class="test-card" data-id="EV-SEND-02"><div class="test-header" onclick="toggleDetails(this)"><span class="test-id">EV-SEND-02</span><span class="test-name">Apply email template</span><div class="test-status"><select class="status-select" onchange="updateStatus(this)" onclick="event.stopPropagation()"><option value="">—</option><option value="pass">✅ Pass</option><option value="fail">❌ Fail</option><option value="skip">⏭️ Skip</option></select></div></div><div class="test-details"><div class="detail-steps"><ol><li>In the Send Evite form, select template "🪷 Cultural Event"</li><li>Verify: Subject line and Message body auto-populate from template</li><li>Try "📋 Meeting" and "🌳 Picnic/Outing" templates too</li></ol></div><textarea class="notes-input" placeholder="Notes..."></textarea></div></div>
+
+        <div class="test-card" data-id="EV-SEND-03"><div class="test-header" onclick="toggleDetails(this)"><span class="test-id">EV-SEND-03</span><span class="test-name">Preview invitation</span><div class="test-status"><select class="status-select" onchange="updateStatus(this)" onclick="event.stopPropagation()"><option value="">—</option><option value="pass">✅ Pass</option><option value="fail">❌ Fail</option><option value="skip">⏭️ Skip</option></select></div></div><div class="test-details"><div class="detail-steps"><ol><li>Fill in event details and message</li><li>Click "Preview" button</li><li>Verify: Preview alert shows formatted invitation with event name, date, venue</li></ol></div><textarea class="notes-input" placeholder="Notes..."></textarea></div></div>
+
+        <div class="test-card" data-id="EV-SEND-04"><div class="test-header" onclick="toggleDetails(this)"><span class="test-id">EV-SEND-04</span><span class="test-name">Send invitation to all members</span><div class="test-status"><select class="status-select" onchange="updateStatus(this)" onclick="event.stopPropagation()"><option value="">—</option><option value="pass">✅ Pass</option><option value="fail">❌ Fail</option><option value="skip">⏭️ Skip</option></select></div></div><div class="test-details"><div class="detail-steps"><ol><li>Select event, fill in date/time/venue</li><li>Select recipients: "All Members (156)"</li><li>Check dietary/kids collection checkboxes</li><li>Click "Send Invitations"</li><li>Verify: Success alert with event name & recipient count</li><li>Verify: New invitation appears in Sent Invitations list</li></ol></div><textarea class="notes-input" placeholder="Notes..."></textarea></div></div>
+
+        <div class="test-card" data-id="EV-SEND-05"><div class="test-header" onclick="toggleDetails(this)"><span class="test-id">EV-SEND-05</span><span class="test-name">Cancel send form</span><div class="test-status"><select class="status-select" onchange="updateStatus(this)" onclick="event.stopPropagation()"><option value="">—</option><option value="pass">✅ Pass</option><option value="fail">❌ Fail</option><option value="skip">⏭️ Skip</option></select></div></div><div class="test-details"><ol><li>Open form, click Cancel</li><li>Verify: Form hides</li></ol><textarea class="notes-input" placeholder="Notes..."></textarea></div></div>
+    </div>
+
+    <div class="workflow-group">
+        <div class="workflow-title">📊 RSVP Tracking & Reports <span class="section-badge badge-evite">Evite</span></div>
+        <div class="test-card" data-id="EV-RPT-01"><div class="test-header" onclick="toggleDetails(this)"><span class="test-id">EV-RPT-01</span><span class="test-name">Sent invitations list shows response counts</span><div class="test-status"><select class="status-select" onchange="updateStatus(this)" onclick="event.stopPropagation()"><option value="">—</option><option value="pass">✅ Pass</option><option value="fail">❌ Fail</option><option value="skip">⏭️ Skip</option></select></div></div><div class="test-details"><ol><li>View Sent Invitations in Evite section</li><li>Verify: Each card shows Attending/Maybe/Declined counts</li><li>Verify: Response rate percentage displayed</li><li>Verify: Expected headcount (adults + kids)</li></ol><textarea class="notes-input" placeholder="Notes..."></textarea></div></div>
+
+        <div class="test-card" data-id="EV-RPT-02"><div class="test-header" onclick="toggleDetails(this)"><span class="test-id">EV-RPT-02</span><span class="test-name">View detailed RSVP report</span><div class="test-status"><select class="status-select" onchange="updateStatus(this)" onclick="event.stopPropagation()"><option value="">—</option><option value="pass">✅ Pass</option><option value="fail">❌ Fail</option><option value="skip">⏭️ Skip</option></select></div></div><div class="test-details"><div class="detail-steps"><ol><li>Click "Report" on Nabo Borsho invitation</li><li>Verify: Report area opens with stats (Total Responses, Attending, Maybe, Declined, Adults, Kids)</li><li>Verify: Dietary Summary section shows breakdown</li><li>Verify: Response table shows each member's details</li></ol></div><textarea class="notes-input" placeholder="Notes..."></textarea></div></div>
+
+        <div class="test-card" data-id="EV-RPT-03"><div class="test-header" onclick="toggleDetails(this)"><span class="test-id">EV-RPT-03</span><span class="test-name">Export RSVP report as CSV</span><div class="test-status"><select class="status-select" onchange="updateStatus(this)" onclick="event.stopPropagation()"><option value="">—</option><option value="pass">✅ Pass</option><option value="fail">❌ Fail</option><option value="skip">⏭️ Skip</option></select></div></div><div class="test-details"><ol><li>Click "Export CSV" in report area</li><li>Verify: CSV file downloads with RSVP data</li></ol><textarea class="notes-input" placeholder="Notes..."></textarea></div></div>
+
+        <div class="test-card" data-id="EV-RPT-04"><div class="test-header" onclick="toggleDetails(this)"><span class="test-id">EV-RPT-04</span><span class="test-name">Send reminder to non-respondents</span><div class="test-status"><select class="status-select" onchange="updateStatus(this)" onclick="event.stopPropagation()"><option value="">—</option><option value="pass">✅ Pass</option><option value="fail">❌ Fail</option><option value="skip">⏭️ Skip</option></select></div></div><div class="test-details"><ol><li>Click "Remind" on an invitation</li><li>Verify: Alert shows number of members who haven't responded</li></ol><textarea class="notes-input" placeholder="Notes..."></textarea></div></div>
+    </div>
+</div>
+
+<!-- ==================== DATA IMPORT TAB ==================== -->
+<div class="tab-content" id="tab-import">
+    <div class="cred-box">
+        <h4>📤 Data Import Testing</h4>
+        <p>Use admin or EC Secretary: <code>admin_test</code> / <code>admin123</code> OR <code>ec_members</code> / <code>members123</code></p>
+    </div>
+
+    <div class="workflow-group">
+        <div class="workflow-title">📤 Excel/CSV Import <span class="section-badge badge-import">Import</span></div>
+        <div class="test-card" data-id="IMP-01"><div class="test-header" onclick="toggleDetails(this)"><span class="test-id">IMP-01</span><span class="test-name">Data Import section loads with 3 import types</span><div class="test-status"><select class="status-select" onchange="updateStatus(this)" onclick="event.stopPropagation()"><option value="">—</option><option value="pass">✅ Pass</option><option value="fail">❌ Fail</option><option value="skip">⏭️ Skip</option></select></div></div><div class="test-details"><ol><li>Navigate to Data Import section</li><li>Verify: Three cards visible — Member Import, Event Import, Payment Import</li><li>Verify: Upload and Template buttons on each card</li></ol><textarea class="notes-input" placeholder="Notes..."></textarea></div></div>
+
+        <div class="test-card" data-id="IMP-02"><div class="test-header" onclick="toggleDetails(this)"><span class="test-id">IMP-02</span><span class="test-name">Download CSV template</span><div class="test-status"><select class="status-select" onchange="updateStatus(this)" onclick="event.stopPropagation()"><option value="">—</option><option value="pass">✅ Pass</option><option value="fail">❌ Fail</option><option value="skip">⏭️ Skip</option></select></div></div><div class="test-details"><ol><li>Click "Template" on Member Import card</li><li>Verify: CSV file downloads with correct headers (First Name, Last Name, Email, Phone, Membership Type)</li><li>Try Event and Payment templates too</li></ol><textarea class="notes-input" placeholder="Notes..."></textarea></div></div>
+
+        <div class="test-card" data-id="IMP-03"><div class="test-header" onclick="toggleDetails(this)"><span class="test-id">IMP-03</span><span class="test-name">Upload CSV file and preview data</span><div class="test-status"><select class="status-select" onchange="updateStatus(this)" onclick="event.stopPropagation()"><option value="">—</option><option value="pass">✅ Pass</option><option value="fail">❌ Fail</option><option value="skip">⏭️ Skip</option></select></div></div><div class="test-details"><div class="detail-steps"><ol><li>Download the member template</li><li>Add test data rows to the CSV</li><li>Click "Upload" on Member Import</li><li>Select the CSV file</li><li>Verify: Import Preview area shows with column headers and data rows</li><li>Verify: Row count and column count displayed</li></ol></div><textarea class="notes-input" placeholder="Notes..."></textarea></div></div>
+
+        <div class="test-card" data-id="IMP-04"><div class="test-header" onclick="toggleDetails(this)"><span class="test-id">IMP-04</span><span class="test-name">Confirm import and verify success</span><div class="test-status"><select class="status-select" onchange="updateStatus(this)" onclick="event.stopPropagation()"><option value="">—</option><option value="pass">✅ Pass</option><option value="fail">❌ Fail</option><option value="skip">⏭️ Skip</option></select></div></div><div class="test-details"><ol><li>After preview, click "Confirm Import"</li><li>Verify: Success alert with record count</li><li>Verify: Import History table updated with new entry</li></ol><textarea class="notes-input" placeholder="Notes..."></textarea></div></div>
+
+        <div class="test-card" data-id="IMP-05"><div class="test-header" onclick="toggleDetails(this)"><span class="test-id">IMP-05</span><span class="test-name">Import history displays previous imports</span><div class="test-status"><select class="status-select" onchange="updateStatus(this)" onclick="event.stopPropagation()"><option value="">—</option><option value="pass">✅ Pass</option><option value="fail">❌ Fail</option><option value="skip">⏭️ Skip</option></select></div></div><div class="test-details"><ol><li>Scroll to Import History section</li><li>Verify: Previous imports listed with date, type, records, status, imported by</li></ol><textarea class="notes-input" placeholder="Notes..."></textarea></div></div>
+    </div>
+</div>
+
+<!-- ==================== RADIO TAB ==================== -->
+<div class="tab-content" id="tab-radio">
+    <div class="cred-box">
+        <h4>📻 Radio Program Testing</h4>
+        <p>Test public radio player, member portal radio with song requests, and admin radio management dashboard</p>
+    </div>
+
+    <!-- Public Radio Player -->
+    <div class="workflow-group">
+        <div class="workflow-title">🔊 Public Radio Player (Landing Page) <span class="section-badge badge-radio">Radio</span></div>
+        <div class="test-card" data-id="RAD-01"><div class="test-header" onclick="toggleDetails(this)"><span class="test-id">RAD-01</span><span class="test-name">Public radio section renders on landing page</span><div class="test-status"><select class="status-select" onchange="updateStatus(this)" onclick="event.stopPropagation()"><option value="">—</option><option value="pass">✅ Pass</option><option value="fail">❌ Fail</option><option value="skip">⏭️ Skip</option></select></div></div><div class="test-details"><ol><li>Scroll to Radio section on landing page (or click Radio nav link)</li><li>Verify: Section header "BANF Radio" visible</li><li>Verify: Now Playing card with station name displayed</li><li>Verify: Previous / Play / Next buttons present</li></ol><textarea class="notes-input" placeholder="Notes..."></textarea></div></div>
+
+        <div class="test-card" data-id="RAD-02"><div class="test-header" onclick="toggleDetails(this)"><span class="test-id">RAD-02</span><span class="test-name">Public radio play/pause toggle works</span><div class="test-status"><select class="status-select" onchange="updateStatus(this)" onclick="event.stopPropagation()"><option value="">—</option><option value="pass">✅ Pass</option><option value="fail">❌ Fail</option><option value="skip">⏭️ Skip</option></select></div></div><div class="test-details"><ol><li>Click Play ▶️ button in the public radio player</li><li>Verify: Button icon changes to ⏸ (pause)</li><li>Verify: Audio plays or API call fires (check console)</li><li>Click Pause button</li><li>Verify: Button reverts to ▶️ and playback stops</li></ol><textarea class="notes-input" placeholder="Notes..."></textarea></div></div>
+
+        <div class="test-card" data-id="RAD-03"><div class="test-header" onclick="toggleDetails(this)"><span class="test-id">RAD-03</span><span class="test-name">Public radio station skip (next/previous)</span><div class="test-status"><select class="status-select" onchange="updateStatus(this)" onclick="event.stopPropagation()"><option value="">—</option><option value="pass">✅ Pass</option><option value="fail">❌ Fail</option><option value="skip">⏭️ Skip</option></select></div></div><div class="test-details"><ol><li>Click Next ⏭ button</li><li>Verify: Station name changes to next station</li><li>Click Previous ⏮ button</li><li>Verify: Station name reverts or cycles to previous</li></ol><textarea class="notes-input" placeholder="Notes..."></textarea></div></div>
+
+        <div class="test-card" data-id="RAD-04"><div class="test-header" onclick="toggleDetails(this)"><span class="test-id">RAD-04</span><span class="test-name">Program schedule displays on landing page</span><div class="test-status"><select class="status-select" onchange="updateStatus(this)" onclick="event.stopPropagation()"><option value="">—</option><option value="pass">✅ Pass</option><option value="fail">❌ Fail</option><option value="skip">⏭️ Skip</option></select></div></div><div class="test-details"><ol><li>Check radio section for "Today's Schedule" or schedule listing</li><li>Verify: Program names, times, and categories visible</li><li>Verify: Fallback schedule shows if API unavailable</li></ol><textarea class="notes-input" placeholder="Notes..."></textarea></div></div>
+    </div>
+
+    <!-- Member Portal Radio -->
+    <div class="workflow-group">
+        <div class="workflow-title">📻 Member Portal Radio <span class="section-badge badge-member">Member</span> <span class="section-badge badge-radio">Radio</span></div>
+        <div class="test-card" data-id="RAD-05"><div class="test-header" onclick="toggleDetails(this)"><span class="test-id">RAD-05</span><span class="test-name">Member radio section loads with player controls</span><div class="test-status"><select class="status-select" onchange="updateStatus(this)" onclick="event.stopPropagation()"><option value="">—</option><option value="pass">✅ Pass</option><option value="fail">❌ Fail</option><option value="skip">⏭️ Skip</option></select></div></div><div class="test-details"><ol><li>Login as member_test / member123</li><li>Navigate to Radio section in member portal sidebar</li><li>Verify: "🔴 Live" badge visible</li><li>Verify: Now Playing card with station name</li><li>Verify: ⏮ Previous, ▶️ Play, ⏭ Next buttons present</li></ol><textarea class="notes-input" placeholder="Notes..."></textarea></div></div>
+
+        <div class="test-card" data-id="RAD-06"><div class="test-header" onclick="toggleDetails(this)"><span class="test-id">RAD-06</span><span class="test-name">Member radio play/skip controls functional</span><div class="test-status"><select class="status-select" onchange="updateStatus(this)" onclick="event.stopPropagation()"><option value="">—</option><option value="pass">✅ Pass</option><option value="fail">❌ Fail</option><option value="skip">⏭️ Skip</option></select></div></div><div class="test-details"><ol><li>Click Play button in member radio player</li><li>Verify: Calls toggleRadio() — icon changes or audio starts</li><li>Click Next button</li><li>Verify: Calls skipStation('next') — station changes</li><li>Click Previous button</li><li>Verify: Calls skipStation('prev') — station changes</li></ol><textarea class="notes-input" placeholder="Notes..."></textarea></div></div>
+
+        <div class="test-card" data-id="RAD-07"><div class="test-header" onclick="toggleDetails(this)"><span class="test-id">RAD-07</span><span class="test-name">Member radio schedule preview displays</span><div class="test-status"><select class="status-select" onchange="updateStatus(this)" onclick="event.stopPropagation()"><option value="">—</option><option value="pass">✅ Pass</option><option value="fail">❌ Fail</option><option value="skip">⏭️ Skip</option></select></div></div><div class="test-details"><ol><li>Look for "📅 Today's Schedule" section in member radio</li><li>Verify: Schedule list shows time slots with program names</li><li>Verify: At least 3 schedule entries visible</li></ol><textarea class="notes-input" placeholder="Notes..."></textarea></div></div>
+
+        <div class="test-card" data-id="RAD-08"><div class="test-header" onclick="toggleDetails(this)"><span class="test-id">RAD-08</span><span class="test-name">Song request form renders with category selector</span><div class="test-status"><select class="status-select" onchange="updateStatus(this)" onclick="event.stopPropagation()"><option value="">—</option><option value="pass">✅ Pass</option><option value="fail">❌ Fail</option><option value="skip">⏭️ Skip</option></select></div></div><div class="test-details"><ol><li>In member radio section, find "🎵 Request a Song" form</li><li>Verify: Song Title input field present</li><li>Verify: Artist Name input field present</li><li>Verify: Category dropdown with options (Rabindra Sangeet, Bengali Modern, etc.)</li><li>Verify: Dedication Message textarea present</li><li>Verify: "Submit Request" button present</li></ol><textarea class="notes-input" placeholder="Notes..."></textarea></div></div>
+
+        <div class="test-card" data-id="RAD-09"><div class="test-header" onclick="toggleDetails(this)"><span class="test-id">RAD-09</span><span class="test-name">Submit song request works and shows in My Requests</span><div class="test-status"><select class="status-select" onchange="updateStatus(this)" onclick="event.stopPropagation()"><option value="">—</option><option value="pass">✅ Pass</option><option value="fail">❌ Fail</option><option value="skip">⏭️ Skip</option></select></div></div><div class="test-details"><ol><li>Fill in: Song Title = "Ami Chini Go Chini"</li><li>Fill in: Artist = "Rabindranath Tagore"</li><li>Select Category: "Rabindra Sangeet"</li><li>Optionally add dedication message</li><li>Click "Submit Request"</li><li>Verify: Success alert appears</li><li>Verify: Form fields reset after submission</li><li>Verify: Song appears in "🎶 My Recent Requests" list below</li><li>Verify: Request shows song title, artist, status "Pending", and time</li></ol><textarea class="notes-input" placeholder="Notes..."></textarea></div></div>
+
+        <div class="test-card" data-id="RAD-10"><div class="test-header" onclick="toggleDetails(this)"><span class="test-id">RAD-10</span><span class="test-name">Song request validation (empty fields)</span><div class="test-status"><select class="status-select" onchange="updateStatus(this)" onclick="event.stopPropagation()"><option value="">—</option><option value="pass">✅ Pass</option><option value="fail">❌ Fail</option><option value="skip">⏭️ Skip</option></select></div></div><div class="test-details"><ol><li>Leave Song Title and Artist fields empty</li><li>Click "Submit Request"</li><li>Verify: Alert shown asking to fill required fields</li><li>Verify: Form is not submitted</li></ol><textarea class="notes-input" placeholder="Notes..."></textarea></div></div>
+    </div>
+
+    <!-- Admin Radio Management -->
+    <div class="workflow-group">
+        <div class="workflow-title">🔧 Admin Radio Management <span class="section-badge badge-admin">Admin</span> <span class="section-badge badge-radio">Radio</span></div>
+        <div class="test-card" data-id="RAD-11"><div class="test-header" onclick="toggleDetails(this)"><span class="test-id">RAD-11</span><span class="test-name">Admin radio dashboard loads with stats</span><div class="test-status"><select class="status-select" onchange="updateStatus(this)" onclick="event.stopPropagation()"><option value="">—</option><option value="pass">✅ Pass</option><option value="fail">❌ Fail</option><option value="skip">⏭️ Skip</option></select></div></div><div class="test-details"><ol><li>Login as admin_test / admin123</li><li>Navigate to Radio section in admin sidebar</li><li>Verify: 4 stat cards visible — Active Listeners, Uptime, Pending Requests, Library Songs</li><li>Verify: Status toggle button shows "🟢 Online" or "🔴 Offline"</li></ol><textarea class="notes-input" placeholder="Notes..."></textarea></div></div>
+
+        <div class="test-card" data-id="RAD-12"><div class="test-header" onclick="toggleDetails(this)"><span class="test-id">RAD-12</span><span class="test-name">Admin Now Playing panel with playback controls</span><div class="test-status"><select class="status-select" onchange="updateStatus(this)" onclick="event.stopPropagation()"><option value="">—</option><option value="pass">✅ Pass</option><option value="fail">❌ Fail</option><option value="skip">⏭️ Skip</option></select></div></div><div class="test-details"><ol><li>In admin radio, find "Now Playing" section</li><li>Verify: Current song/station name displayed</li><li>Verify: ⏮ Previous, ⏯ Play/Pause, ⏭ Next, 🔄 Refresh buttons visible</li><li>Click each control button</li><li>Verify: Buttons trigger adminTogglePlay(), adminSkipTrack(), adminRefreshStatus()</li></ol><textarea class="notes-input" placeholder="Notes..."></textarea></div></div>
+
+        <div class="test-card" data-id="RAD-13"><div class="test-header" onclick="toggleDetails(this)"><span class="test-id">RAD-13</span><span class="test-name">Admin radio toggle online/offline</span><div class="test-status"><select class="status-select" onchange="updateStatus(this)" onclick="event.stopPropagation()"><option value="">—</option><option value="pass">✅ Pass</option><option value="fail">❌ Fail</option><option value="skip">⏭️ Skip</option></select></div></div><div class="test-details"><ol><li>Click the "🟢 Online" / "🔴 Offline" toggle button</li><li>Verify: Button text toggles between Online and Offline</li><li>Verify: Button color changes (success ↔ danger)</li><li>Verify: Confirmation alert shows new status</li></ol><textarea class="notes-input" placeholder="Notes..."></textarea></div></div>
+
+        <div class="test-card" data-id="RAD-14"><div class="test-header" onclick="toggleDetails(this)"><span class="test-id">RAD-14</span><span class="test-name">Admin schedule table displays correctly</span><div class="test-status"><select class="status-select" onchange="updateStatus(this)" onclick="event.stopPropagation()"><option value="">—</option><option value="pass">✅ Pass</option><option value="fail">❌ Fail</option><option value="skip">⏭️ Skip</option></select></div></div><div class="test-details"><ol><li>In admin radio, find "Today's Schedule" table</li><li>Verify: Table has columns — Time, Program, Category, Status</li><li>Verify: Multiple time slots listed (e.g., 6:00 AM – 8:00 AM, etc.)</li><li>Verify: "Edit Schedule" button present</li></ol><textarea class="notes-input" placeholder="Notes..."></textarea></div></div>
+
+        <div class="test-card" data-id="RAD-15"><div class="test-header" onclick="toggleDetails(this)"><span class="test-id">RAD-15</span><span class="test-name">Admin song requests management (approve/reject)</span><div class="test-status"><select class="status-select" onchange="updateStatus(this)" onclick="event.stopPropagation()"><option value="">—</option><option value="pass">✅ Pass</option><option value="fail">❌ Fail</option><option value="skip">⏭️ Skip</option></select></div></div><div class="test-details"><ol><li>In admin radio, find "Pending Song Requests" table</li><li>Verify: Table shows columns — Song, Artist, Requested By, Time, Actions</li><li>Verify: Sample requests listed (e.g., "Ami Chini Go Chini", "Ekla Chalo Re")</li><li>Click ✅ Approve on a request</li><li>Verify: Alert confirms approval and row updates</li><li>Click ❌ Reject on a request</li><li>Verify: Alert confirms rejection and row updates</li></ol><textarea class="notes-input" placeholder="Notes..."></textarea></div></div>
+
+        <div class="test-card" data-id="RAD-16"><div class="test-header" onclick="toggleDetails(this)"><span class="test-id">RAD-16</span><span class="test-name">Admin music library grid displays categories</span><div class="test-status"><select class="status-select" onchange="updateStatus(this)" onclick="event.stopPropagation()"><option value="">—</option><option value="pass">✅ Pass</option><option value="fail">❌ Fail</option><option value="skip">⏭️ Skip</option></select></div></div><div class="test-details"><ol><li>In admin radio, find "Music Library" section</li><li>Verify: 6 category cards visible (Rabindra Sangeet, Bengali Modern, Nazrul Geeti, etc.)</li><li>Verify: Each card shows song count</li><li>Verify: "Upload Song" and "Full Library" buttons present</li></ol><textarea class="notes-input" placeholder="Notes..."></textarea></div></div>
+    </div>
+
+    <!-- Radio API Testing -->
+    <div class="workflow-group">
+        <div class="workflow-title">🌐 Radio API Connectivity <span class="section-badge badge-radio">Radio</span></div>
+        <div class="test-card" data-id="RAD-17"><div class="test-header" onclick="toggleDetails(this)"><span class="test-id">RAD-17</span><span class="test-name">Radio Flask API endpoints respond (if server running)</span><div class="test-status"><select class="status-select" onchange="updateStatus(this)" onclick="event.stopPropagation()"><option value="">—</option><option value="pass">✅ Pass</option><option value="fail">❌ Fail</option><option value="skip">⏭️ Skip</option></select></div></div><div class="test-details"><div class="detail-steps"><ol><li>Start Flask server: <code>python audio_radio_server.py</code></li><li>Test: <code>http://127.0.0.1:5000/api/radio/current-status</code> — returns JSON with current track</li><li>Test: <code>http://127.0.0.1:5000/api/radio/autonomous/schedule</code> — returns schedule JSON</li><li>Test: <code>http://127.0.0.1:5000/api/radio/autonomous/next-track</code> — skips to next</li><li>Test: <code>http://127.0.0.1:5000/api/radio/autonomous/previous-track</code> — goes to previous</li><li>Verify: Each endpoint returns valid JSON with expected fields</li></ol></div><textarea class="notes-input" placeholder="Notes..."></textarea></div></div>
+
+        <div class="test-card" data-id="RAD-18"><div class="test-header" onclick="toggleDetails(this)"><span class="test-id">RAD-18</span><span class="test-name">Fallback mode when API is unavailable</span><div class="test-status"><select class="status-select" onchange="updateStatus(this)" onclick="event.stopPropagation()"><option value="">—</option><option value="pass">✅ Pass</option><option value="fail">❌ Fail</option><option value="skip">⏭️ Skip</option></select></div></div><div class="test-details"><ol><li>Ensure Flask server is NOT running</li><li>Load the app and navigate to radio section</li><li>Verify: Fallback stations display (BANF Bangla Radio, etc.)</li><li>Verify: Player still has play/pause/skip controls</li><li>Verify: No console errors that break the page</li></ol><textarea class="notes-input" placeholder="Notes..."></textarea></div></div>
+    </div>
+</div>
+
+<script>
+document.getElementById('generatedDate').textContent = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+function switchTab(tabId) {
+    document.querySelectorAll('.tab-content').forEach(tc => tc.classList.remove('active'));
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.getElementById('tab-' + tabId).classList.add('active');
+    event.target.classList.add('active');
+    updateSummary();
+}
+
+function toggleDetails(header) {
+    const details = header.nextElementSibling;
+    details.classList.toggle('open');
+}
+
+function updateStatus(select) {
+    select.className = 'status-select ' + select.value;
+    updateSummary();
+}
+
+function updateSummary() {
+    const selects = document.querySelectorAll('.status-select');
+    let total = selects.length, pass = 0, fail = 0, skip = 0;
+    selects.forEach(s => {
+        if (s.value === 'pass') pass++;
+        else if (s.value === 'fail') fail++;
+        else if (s.value === 'skip') skip++;
+    });
+    document.getElementById('statTotal').textContent = `Total: ${total}`;
+    document.getElementById('statPass').textContent = `✅ Pass: ${pass}`;
+    document.getElementById('statFail').textContent = `❌ Fail: ${fail}`;
+    document.getElementById('statSkip').textContent = `⏭️ Skip: ${skip}`;
+}
+
+function markAllVisible(status) {
+    const active = document.querySelector('.tab-content.active');
+    if (!active) return;
+    active.querySelectorAll('.status-select').forEach(s => { s.value = status; s.className = 'status-select ' + status; });
+    updateSummary();
+}
+
+function resetAll() {
+    document.querySelectorAll('.status-select').forEach(s => { s.value = ''; s.className = 'status-select'; });
+    updateSummary();
+}
+
+function exportResults() {
+    const results = [];
+    document.querySelectorAll('.test-card').forEach(card => {
+        const id = card.dataset.id;
+        const name = card.querySelector('.test-name')?.textContent || '';
+        const status = card.querySelector('.status-select')?.value || 'untested';
+        const notes = card.querySelector('.notes-input')?.value || '';
+        results.push({ id, name, status, notes });
+    });
+    const report = {
+        title: 'BANF Comprehensive Acceptance Test',
+        date: new Date().toISOString(),
+        summary: {
+            total: results.length,
+            pass: results.filter(r => r.status === 'pass').length,
+            fail: results.filter(r => r.status === 'fail').length,
+            skip: results.filter(r => r.status === 'skip').length,
+            untested: results.filter(r => r.status === 'untested').length
+        },
+        results
+    };
+    const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `banf_acceptance_test_${new Date().toISOString().slice(0,10)}.json`; a.click();
+    URL.revokeObjectURL(url);
+}
+
+updateSummary();
+</script>
+</body>
+</html>
