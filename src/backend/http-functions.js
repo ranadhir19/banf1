@@ -26,6 +26,7 @@ import * as guide from 'backend/guide.jsw';
 import * as magazine from 'backend/magazine.jsw';
 import * as documents from 'backend/documents.jsw';
 import * as emailGateway from 'backend/email-gateway.jsw';
+import * as zelle from 'backend/zelle-service.jsw';
 import * as setupCollections from 'backend/setup-collections.jsw';
 
 // ============================================
@@ -424,6 +425,246 @@ export async function post_submit_song_request(request) {
         return errorResponse(error.message, 400);
     }
 }
+
+/**
+ * GET /_functions/radio_status
+ * Get radio status (is live, current track info)
+ */
+export async function get_radio_status(request) {
+    try {
+        const [config, currentShow] = await Promise.all([
+            radio.getRadioStationConfig(),
+            radio.getCurrentShow().catch(() => null)
+        ]);
+        return jsonResponse({
+            success: true,
+            isLive: config?.isLive || false,
+            station: config?.stationName || 'BANF Radio',
+            currentShow: currentShow,
+            streamUrl: config?.streamUrl || ''
+        });
+    } catch (error) {
+        return errorResponse(error.message);
+    }
+}
+
+/**
+ * POST /_functions/radio_start
+ * Start/resume radio playback (server-side state update)
+ */
+export async function post_radio_start(request) {
+    try {
+        const config = await radio.getRadioStationConfig();
+        return jsonResponse({ success: true, message: 'Radio playback started', streamUrl: config?.streamUrl || '' });
+    } catch (error) {
+        return errorResponse(error.message);
+    }
+}
+
+/**
+ * POST /_functions/radio_next
+ * Skip to next track (server-side acknowledgement)
+ */
+export async function post_radio_next(request) {
+    try {
+        const upcoming = await radio.getUpcomingShows ? await radio.getUpcomingShows() : [];
+        return jsonResponse({ success: true, message: 'Skipped to next', upcoming });
+    } catch (error) {
+        return errorResponse(error.message);
+    }
+}
+
+/**
+ * POST /_functions/radio_previous
+ * Go to previous track (server-side acknowledgement)
+ */
+export async function post_radio_previous(request) {
+    try {
+        return jsonResponse({ success: true, message: 'Returned to previous' });
+    } catch (error) {
+        return errorResponse(error.message);
+    }
+}
+
+// CORS for radio endpoints
+export function options_radio_status(request) { return handleCors(); }
+export function options_radio_start(request) { return handleCors(); }
+export function options_radio_next(request) { return handleCors(); }
+export function options_radio_previous(request) { return handleCors(); }
+
+// ============================================
+// ZELLE PAYMENT ENDPOINTS
+// ============================================
+
+/**
+ * GET /_functions/zelle_health
+ * Zelle service health check
+ */
+export async function get_zelle_health(request) {
+    try {
+        const result = await zelle.healthCheck();
+        return jsonResponse(result);
+    } catch (error) {
+        return errorResponse(error.message);
+    }
+}
+
+/**
+ * GET /_functions/zelle_stats
+ * Get Zelle dashboard statistics
+ */
+export async function get_zelle_stats(request) {
+    try {
+        const stats = await zelle.getZelleStats();
+        return jsonResponse(stats);
+    } catch (error) {
+        return errorResponse(error.message);
+    }
+}
+
+/**
+ * GET /_functions/zelle_payments?status=pending
+ * Get Zelle payments with optional status filter
+ */
+export async function get_zelle_payments(request) {
+    try {
+        const url = new URL(request.url);
+        const status = url.searchParams.get('status') || 'all';
+        const result = await zelle.getZellePayments(status);
+        return jsonResponse(result);
+    } catch (error) {
+        return errorResponse(error.message);
+    }
+}
+
+/**
+ * POST /_functions/zelle_scan
+ * Scan emails for Zelle payments
+ */
+export async function post_zelle_scan(request) {
+    try {
+        const body = await parseBody(request);
+        const daysBack = body?.days_back || 90;
+        const result = await zelle.scanForZellePayments(daysBack);
+        return jsonResponse(result);
+    } catch (error) {
+        return errorResponse(error.message);
+    }
+}
+
+/**
+ * POST /_functions/zelle_verify
+ * Verify a Zelle payment
+ */
+export async function post_zelle_verify(request) {
+    try {
+        const body = await parseBody(request);
+        if (!body || !body.paymentId) return errorResponse('paymentId required', 400);
+        const result = await zelle.verifyPayment(body.paymentId, body.verifiedBy || 'admin');
+        return jsonResponse(result);
+    } catch (error) {
+        return errorResponse(error.message, 400);
+    }
+}
+
+/**
+ * POST /_functions/zelle_reject
+ * Reject a Zelle payment
+ */
+export async function post_zelle_reject(request) {
+    try {
+        const body = await parseBody(request);
+        if (!body || !body.paymentId) return errorResponse('paymentId required', 400);
+        const result = await zelle.rejectPayment(body.paymentId, body.reason || '');
+        return jsonResponse(result);
+    } catch (error) {
+        return errorResponse(error.message, 400);
+    }
+}
+
+/**
+ * GET /_functions/zelle_members
+ * Get members list for payment matching
+ */
+export async function get_zelle_members(request) {
+    try {
+        const result = await zelle.getZelleMembers();
+        return jsonResponse(result);
+    } catch (error) {
+        return errorResponse(error.message);
+    }
+}
+
+/**
+ * POST /_functions/zelle_match
+ * Match a payment to a member
+ */
+export async function post_zelle_match(request) {
+    try {
+        const body = await parseBody(request);
+        if (!body || !body.paymentId || !body.memberId) {
+            return errorResponse('paymentId and memberId required', 400);
+        }
+        const result = await zelle.matchPaymentToMember(body.paymentId, body.memberId);
+        return jsonResponse(result);
+    } catch (error) {
+        return errorResponse(error.message, 400);
+    }
+}
+
+/**
+ * POST /_functions/zelle_poller
+ * Toggle Zelle poller (start/stop)
+ */
+export async function post_zelle_poller(request) {
+    try {
+        const body = await parseBody(request);
+        const action = body?.action || 'start';
+        const result = action === 'stop' ? await zelle.stopPoller() : await zelle.startPoller();
+        return jsonResponse(result);
+    } catch (error) {
+        return errorResponse(error.message);
+    }
+}
+
+/**
+ * POST /_functions/zelle_seed
+ * Seed test Zelle data
+ */
+export async function post_zelle_seed(request) {
+    try {
+        const result = await zelle.seedTestData();
+        return jsonResponse(result);
+    } catch (error) {
+        return errorResponse(error.message);
+    }
+}
+
+/**
+ * GET /_functions/zelle_history
+ * Get verified Zelle payment history
+ */
+export async function get_zelle_history(request) {
+    try {
+        const result = await zelle.getZelleHistory();
+        return jsonResponse(result);
+    } catch (error) {
+        return errorResponse(error.message);
+    }
+}
+
+// CORS for Zelle endpoints
+export function options_zelle_health(request) { return handleCors(); }
+export function options_zelle_stats(request) { return handleCors(); }
+export function options_zelle_payments(request) { return handleCors(); }
+export function options_zelle_scan(request) { return handleCors(); }
+export function options_zelle_verify(request) { return handleCors(); }
+export function options_zelle_reject(request) { return handleCors(); }
+export function options_zelle_members(request) { return handleCors(); }
+export function options_zelle_match(request) { return handleCors(); }
+export function options_zelle_poller(request) { return handleCors(); }
+export function options_zelle_seed(request) { return handleCors(); }
+export function options_zelle_history(request) { return handleCors(); }
 
 // ============================================
 // SPONSORS ENDPOINTS

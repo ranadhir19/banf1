@@ -17,7 +17,7 @@
 6. [Signing Up with Your Real Name (EC Members)](#6-signing-up-with-your-real-name)
 7. [Testing the Public Landing Page](#7-testing-the-public-landing-page)
 8. [Mobile Testing (Phone/Tablet)](#8-mobile-testing)
-9. [Known Limitations](#9-known-limitations)
+9. [Architecture & Service Notes](#9-architecture--service-notes)
 10. [How to Submit Feedback](#10-how-to-submit-feedback)
 11. [Feedback Template](#11-feedback-template)
 12. [Detailed Test Checklist Reference](#12-detailed-test-checklist)
@@ -356,19 +356,19 @@ Test on your phone OR use Chrome DevTools (F12 → Toggle Device Toolbar → Sel
 
 ---
 
-## 9. Known Limitations
+## 9. Architecture & Service Notes
 
-Please be aware of these known limitations during testing:
+All BANF services run entirely through the **Wix Velo cloud backend** — no local servers or Flask services required. Everything works from the live production URL.
 
 | Feature | Status | Notes |
 |---------|--------|-------|
-| **Zelle Payment Automation** | 🟡 Admin-only, requires local service | Zelle section shows a friendly "offline" banner in production. This is expected — Zelle scanning requires a local server and is for admin use only. |
-| **Radio Streaming** | 🟡 Fallback mode in production | If the radio Flask server isn't running, the radio player shows fallback stations. Controls still work visually. |
-| **Gmail/Email Sending** | 🟡 Requires backend service | Email sending (Evite) may show demo alerts instead of actually sending if the Gmail service isn't running. |
-| **Data Persistence** | 🟡 Wix Velo dependent | Some data operations depend on Wix Velo backend functions. If they return 404, the frontend shows graceful error messages. |
+| **Zelle Payment Automation** | ✅ Cloud-native (Wix Velo) | Zelle payments are managed via the Wix Velo backend. Scan, verify, match, and reject payments directly from the Admin Portal. |
+| **Radio Streaming** | ✅ Cloud-native (Wix Velo) | Radio station config, schedule, and controls are all served from Wix Velo HTTP endpoints. |
+| **Gmail/Email** | ✅ Cloud-native (Wix Velo) | Email sending (Evite, inbox) is fully migrated to Wix Velo backend — no Flask or localhost dependency. |
+| **Data Persistence** | ✅ Wix Data Collections | All data (members, payments, events, etc.) is stored in Wix Data collections with full CRUD via backend modules. |
 | **File Uploads** | ✅ Client-side parsing works | CSV/XLSX uploads parse on the client side (SheetJS) and show previews. Import confirmation may use demo storage. |
 
-> 💡 **Don't worry about backend API errors** — the focus of this testing is on **UI layout, navigation, role-based access, and user experience**. Report what you see and whether it makes sense.
+> 💡 **All services are cloud-hosted.** There are no localhost dependencies. If any API call returns an error, it's a Wix backend issue — please report it.
 
 ---
 

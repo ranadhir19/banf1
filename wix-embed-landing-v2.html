@@ -8455,14 +8455,10 @@
                 if (sectionId === 'careers') {
                     renderAdminCareerTable();
                 }
-                // Zelle: Check service availability and load payment data when payments section is activated
+                // Zelle: Load payment data when payments section is activated (cloud service — always available)
                 if (sectionId === 'payments') {
-                    zelleCheckService().then(available => {
-                        if (available) {
-                            zelleLoadPayments();
-                            zelleLoadStats();
-                        }
-                    });
+                    zelleLoadPayments();
+                    zelleLoadStats();
                 }
             } else {
                 document.getElementById('adminDashboard')?.classList.add('active');
@@ -11039,53 +11035,27 @@
         })();
 
         // ========== ZELLE PAYMENT AUTOMATION ==========
-        // Zelle runs via Flask microservice - detect if available or show setup instructions
-        const ZELLE_API_DEFAULT = 'http://localhost:5002/api/zelle';
-        let ZELLE_API = ZELLE_API_DEFAULT;
-        let _zelleServiceAvailable = false;
+        // Zelle runs via Wix Velo backend — cloud-native, no localhost required
+        const ZELLE_API = WIX_API_BASE;
         let _zelleCurrentFilter = 'all';
         let _zelleMatchPaymentId = null;
 
-        // Check Zelle service availability on load
-        async function zelleCheckService() {
+        async function zelleApiFetch(endpoint, options = {}) {
             try {
-                const resp = await fetch(`${ZELLE_API}/health`, { method: 'GET', signal: AbortSignal.timeout(3000) });
-                if (resp.ok) { _zelleServiceAvailable = true; return true; }
-            } catch (e) { /* service not running */ }
-            _zelleServiceAvailable = false;
-            // Show offline banner in the Zelle section
-            const banner = document.getElementById('zelleScanBanner');
-            if (banner) {
-                banner.style.display = 'block';
-                banner.style.background = '#fff3e0'; banner.style.borderColor = '#ff9800';
-                document.getElementById('zelleScanMessage').innerHTML =
-                    '<i class="fas fa-info-circle"></i> <strong>Zelle service offline.</strong> The Zelle Payment Automation requires the local admin service (port 5002). ' +
-                    'Contact your admin to start the service for payment processing. All other features work normally.';
-            }
-            return false;
-        }
-
-        async function zelleApiFetch(path, options = {}) {
-            if (!_zelleServiceAvailable) {
-                // Re-check once before failing
-                const alive = await zelleCheckService();
-                if (!alive) return null;
-            }
-            try {
-                const resp = await fetch(`${ZELLE_API}${path}`, {
+                const url = `${ZELLE_API}/zelle_${endpoint}`;
+                const resp = await fetch(url, {
                     headers: { 'Content-Type': 'application/json' },
                     ...options
                 });
                 return await resp.json();
             } catch (err) {
                 console.error('[Zelle API]', err);
-                _zelleServiceAvailable = false;
                 return null;
             }
         }
 
         async function zelleLoadStats() {
-            const data = await zelleApiFetch('/stats');
+            const data = await zelleApiFetch('stats');
             if (!data) return;
             document.getElementById('zelleTotalDetected').textContent = data.total_payments || 0;
             document.getElementById('zellePendingCount').textContent = (data.by_status?.pending?.count || 0);
@@ -11110,7 +11080,7 @@
 
         async function zelleLoadPayments() {
             const statusParam = _zelleCurrentFilter === 'all' ? '' : `?status=${_zelleCurrentFilter}`;
-            const data = await zelleApiFetch(`/payments${statusParam}`);
+            const data = await zelleApiFetch(`payments${statusParam}`);
             if (!data || !data.payments) return;
             const tbody = document.getElementById('zellePaymentsBody');
             if (data.payments.length === 0) {
@@ -11155,7 +11125,7 @@
             btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Scanning...';
             const banner = document.getElementById('zelleScanBanner');
             banner.style.display = 'none';
-            const result = await zelleApiFetch('/scan', { method: 'POST', body: JSON.stringify({ days_back: 90 }) });
+            const result = await zelleApiFetch('scan', { method: 'POST', body: JSON.stringify({ days_back: 90 }) });
             btn.disabled = false;
             btn.innerHTML = '<i class="fas fa-search"></i> Scan Gmail Now';
             if (result) {
@@ -11163,25 +11133,25 @@
                 if (result.new_payments > 0) {
                     banner.style.background = '#e8f5e9'; banner.style.borderColor = '#4caf50';
                     document.getElementById('zelleScanMessage').innerHTML =
-                        `<strong>${result.new_payments}</strong> new Zelle payment(s) detected! (${result.auto_matched} auto-matched) • ${result.emails_checked} emails scanned in ${result.duration_ms}ms`;
+                        `<strong>${result.new_payments}</strong> new Zelle payment(s) detected! (${result.auto_matched} auto-matched) • ${result.emails_checked} emails scanned`;
                 } else {
                     banner.style.background = '#fff3e0'; banner.style.borderColor = '#ff9800';
                     document.getElementById('zelleScanMessage').innerHTML =
-                        `No new payments found. ${result.emails_checked} emails scanned in ${result.duration_ms}ms`;
+                        `No new payments found. ${result.emails_checked} emails scanned`;
                 }
                 zelleLoadPayments();
             } else {
                 banner.style.display = 'block';
                 banner.style.background = '#ffebee'; banner.style.borderColor = '#f44336';
                 document.getElementById('zelleScanMessage').innerHTML =
-                    '❌ Scan failed. Make sure the Zelle service is running on port 5002.';
+                    '❌ Scan failed. Please try again in a moment.';
             }
         }
 
         async function zelleTogglePoller() {
             const btn = document.getElementById('btnZelleAutoToggle');
             const isOn = btn.textContent.includes('ON');
-            const result = await zelleApiFetch(isOn ? '/poller/stop' : '/poller/start', { method: 'POST' });
+            const result = await zelleApiFetch('poller', { method: 'POST', body: JSON.stringify({ action: isOn ? 'stop' : 'start' }) });
             if (result?.success) zelleLoadStats();
         }
 
@@ -11199,13 +11169,13 @@
 
         async function zelleVerifyPayment(id) {
             if (!confirm('Verify this payment?')) return;
-            await zelleApiFetch(`/payments/${id}/verify`, { method: 'POST', body: JSON.stringify({ verified_by: 'admin' }) });
+            await zelleApiFetch('verify', { method: 'POST', body: JSON.stringify({ paymentId: id, verifiedBy: 'admin' }) });
             zelleLoadPayments();
         }
 
         async function zelleRejectPayment(id) {
             const reason = prompt('Reason for rejection (optional):') || '';
-            await zelleApiFetch(`/payments/${id}/reject`, { method: 'POST', body: JSON.stringify({ reason }) });
+            await zelleApiFetch('reject', { method: 'POST', body: JSON.stringify({ paymentId: id, reason }) });
             zelleLoadPayments();
         }
 
@@ -11213,7 +11183,7 @@
             _zelleMatchPaymentId = paymentId;
             document.getElementById('zelleMatchPaymentInfo').textContent = info;
             // Load members
-            const data = await zelleApiFetch('/members');
+            const data = await zelleApiFetch('members');
             const sel = document.getElementById('zelleMatchMemberSelect');
             sel.innerHTML = '<option value="">-- Select a member --</option>';
             if (data?.members) {
@@ -11232,15 +11202,15 @@
         async function zelleConfirmMatch() {
             const memberId = document.getElementById('zelleMatchMemberSelect').value;
             if (!memberId) { alert('Please select a member'); return; }
-            await zelleApiFetch(`/payments/${_zelleMatchPaymentId}/match`, {
-                method: 'POST', body: JSON.stringify({ member_id: memberId })
+            await zelleApiFetch('match', {
+                method: 'POST', body: JSON.stringify({ paymentId: _zelleMatchPaymentId, memberId })
             });
             zelleCloseMatchModal();
             zelleLoadPayments();
         }
 
         async function zelleSeedTestData() {
-            const result = await zelleApiFetch('/test/seed', { method: 'POST' });
+            const result = await zelleApiFetch('seed', { method: 'POST' });
             if (result?.success) {
                 const banner = document.getElementById('zelleScanBanner');
                 banner.style.display = 'block';
@@ -11253,7 +11223,7 @@
 
         function portalRefreshPayments() {
             // Refresh member portal payment view from Zelle service
-            zelleApiFetch('/history').then(data => {
+            zelleApiFetch('history').then(data => {
                 if (!data?.history?.length) return;
                 const tbody = document.getElementById('portalPaymentHistoryBody');
                 tbody.innerHTML = data.history.map(h => {

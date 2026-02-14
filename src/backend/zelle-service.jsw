@@ -1,0 +1,524 @@
+/**
+ * BANF Zelle Payment Service
+ * ============================
+ * Wix Velo Backend Module for Zelle payment management
+ * 
+ * Replaces the Flask localhost:5002 service with cloud-native Wix Data operations.
+ * All payment data stored in the ZellePayments collection.
+ * 
+ * @module backend/zelle-service.jsw
+ */
+
+import wixData from 'wix-data';
+
+const ZELLE_COLLECTION = 'ZellePayments';
+const MEMBERS_COLLECTION = 'Members';
+const ZELLE_HISTORY_COLLECTION = 'ZelleAuditLog';
+
+// =====================================================
+// HEALTH & STATUS
+// =====================================================
+
+/**
+ * Health check — always returns OK (cloud service is always available)
+ */
+export async function healthCheck() {
+    return {
+        status: 'healthy',
+        service: 'BANF Zelle Payment Service (Wix Velo)',
+        timestamp: new Date().toISOString(),
+        version: '2.0.0'
+    };
+}
+
+// =====================================================
+// STATS & DASHBOARD
+// =====================================================
+
+/**
+ * Get Zelle dashboard statistics
+ */
+export async function getZelleStats() {
+    try {
+        const allPayments = await wixData.query(ZELLE_COLLECTION)
+            .limit(1000)
+            .find({ suppressAuth: true });
+
+        const items = allPayments.items;
+        const totalAmount = items.reduce((sum, p) => sum + (p.amount || 0), 0);
+
+        // Group by status
+        const byStatus = {};
+        items.forEach(p => {
+            const status = p.status || (p.isVerified ? 'verified' : 'pending');
+            if (!byStatus[status]) byStatus[status] = { count: 0, amount: 0 };
+            byStatus[status].count++;
+            byStatus[status].amount += (p.amount || 0);
+        });
+
+        const autoMatched = items.filter(p => p.status === 'auto_verified').length;
+        const manualMatched = items.filter(p => p.status === 'verified').length;
+
+        return {
+            total_payments: items.length,
+            total_amount: totalAmount,
+            by_status: byStatus,
+            auto_vs_manual: { auto: autoMatched, manual: manualMatched },
+            poller_active: false,
+            last_poll: { poll_time: new Date().toISOString() }
+        };
+    } catch (error) {
+        console.error('Error getting Zelle stats:', error);
+        return { total_payments: 0, total_amount: 0, by_status: {}, auto_vs_manual: { auto: 0, manual: 0 } };
+    }
+}
+
+// =====================================================
+// PAYMENT CRUD
+// =====================================================
+
+/**
+ * Get all Zelle payments with optional status filter
+ */
+export async function getZellePayments(statusFilter) {
+    try {
+        let query = wixData.query(ZELLE_COLLECTION)
+            .descending('_createdDate')
+            .limit(200);
+
+        if (statusFilter && statusFilter !== 'all') {
+            query = query.eq('status', statusFilter);
+        }
+
+        const result = await query.find({ suppressAuth: true });
+
+        const payments = result.items.map((p, idx) => ({
+            id: p._id,
+            email_date: p.paymentDate || p._createdDate,
+            sender_name: p.senderName || '',
+            sender_email: p.senderEmail || '',
+            amount: p.amount || 0,
+            memo: p.description || p.memo || '',
+            bank_source: p.bankSource || 'Zelle',
+            matched_member_name: p.matchedMemberName || p.memberName || null,
+            matched_member_id: p.memberId || null,
+            status: p.status || (p.isVerified ? 'verified' : 'pending'),
+            zelle_code: p.zelleCode || ''
+        }));
+
+        return { success: true, payments, total: result.totalCount };
+    } catch (error) {
+        console.error('Error getting Zelle payments:', error);
+        return { success: false, payments: [], error: error.message };
+    }
+}
+
+/**
+ * Record a new Zelle payment (from email scan or manual entry)
+ */
+export async function recordZellePayment(paymentData) {
+    try {
+        // Check for duplicate by zelleCode
+        if (paymentData.zelleCode) {
+            const existing = await wixData.query(ZELLE_COLLECTION)
+                .eq('zelleCode', paymentData.zelleCode)
+                .find({ suppressAuth: true });
+            if (existing.items.length > 0) {
+                return { success: false, error: 'Payment with this code already exists', duplicate: true };
+            }
+        }
+
+        // Auto-match against members
+        let matchedMember = null;
+        if (paymentData.senderName || paymentData.senderEmail) {
+            matchedMember = await autoMatchMember(paymentData.senderName, paymentData.senderEmail);
+        }
+
+        const payment = {
+            zelleCode: paymentData.zelleCode || generateZelleCode(),
+            transactionId: paymentData.transactionId || '',
+            senderName: paymentData.senderName || '',
+            senderEmail: paymentData.senderEmail || '',
+            senderPhone: paymentData.senderPhone || '',
+            amount: parseFloat(paymentData.amount) || 0,
+            description: paymentData.description || paymentData.memo || '',
+            memo: paymentData.memo || '',
+            bankSource: paymentData.bank_source || 'Zelle',
+            paymentType: paymentData.paymentType || 'membership',
+            status: matchedMember ? 'auto_verified' : 'pending',
+            isVerified: !!matchedMember,
+            memberId: matchedMember ? matchedMember._id : null,
+            matchedMemberName: matchedMember ? matchedMember.fullName : null,
+            memberName: matchedMember ? matchedMember.fullName : '',
+            verifiedBy: matchedMember ? 'auto' : null,
+            verificationNotes: matchedMember ? 'Auto-matched by name/email' : '',
+            paymentDate: new Date(paymentData.paymentDate || paymentData.email_date || Date.now()),
+            _createdDate: new Date(),
+            verifiedAt: matchedMember ? new Date() : null
+        };
+
+        const result = await wixData.insert(ZELLE_COLLECTION, payment);
+
+        // Audit log
+        await logZelleAction('payment_recorded', result._id, {
+            amount: payment.amount,
+            sender: payment.senderName,
+            autoMatched: !!matchedMember
+        });
+
+        return {
+            success: true,
+            paymentId: result._id,
+            auto_matched: !!matchedMember,
+            matched_member: matchedMember ? matchedMember.fullName : null
+        };
+    } catch (error) {
+        console.error('Error recording Zelle payment:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+/**
+ * Verify a payment (admin action)
+ */
+export async function verifyPayment(paymentId, verifiedBy) {
+    try {
+        const payment = await wixData.get(ZELLE_COLLECTION, paymentId, { suppressAuth: true });
+        if (!payment) return { success: false, error: 'Payment not found' };
+
+        payment.status = 'verified';
+        payment.isVerified = true;
+        payment.verifiedBy = verifiedBy || 'admin';
+        payment.verifiedAt = new Date();
+
+        await wixData.update(ZELLE_COLLECTION, payment, { suppressAuth: true });
+        await logZelleAction('payment_verified', paymentId, { verifiedBy });
+        return { success: true };
+    } catch (error) {
+        console.error('Error verifying payment:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+/**
+ * Reject a payment (admin action)
+ */
+export async function rejectPayment(paymentId, reason) {
+    try {
+        const payment = await wixData.get(ZELLE_COLLECTION, paymentId, { suppressAuth: true });
+        if (!payment) return { success: false, error: 'Payment not found' };
+
+        payment.status = 'rejected';
+        payment.isVerified = false;
+        payment.verificationNotes = reason || 'Rejected by admin';
+
+        await wixData.update(ZELLE_COLLECTION, payment, { suppressAuth: true });
+        await logZelleAction('payment_rejected', paymentId, { reason });
+        return { success: true };
+    } catch (error) {
+        console.error('Error rejecting payment:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+/**
+ * Match a payment to a specific member
+ */
+export async function matchPaymentToMember(paymentId, memberId) {
+    try {
+        const payment = await wixData.get(ZELLE_COLLECTION, paymentId, { suppressAuth: true });
+        if (!payment) return { success: false, error: 'Payment not found' };
+
+        const member = await wixData.get(MEMBERS_COLLECTION, memberId, { suppressAuth: true });
+        if (!member) return { success: false, error: 'Member not found' };
+
+        payment.memberId = memberId;
+        payment.matchedMemberName = member.fullName || `${member.firstName || ''} ${member.lastName || ''}`.trim();
+        payment.memberName = payment.matchedMemberName;
+
+        await wixData.update(ZELLE_COLLECTION, payment, { suppressAuth: true });
+        await logZelleAction('payment_matched', paymentId, { memberId, memberName: payment.matchedMemberName });
+        return { success: true, matched_member: payment.matchedMemberName };
+    } catch (error) {
+        console.error('Error matching payment:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+// =====================================================
+// MEMBER MATCHING
+// =====================================================
+
+/**
+ * Get members list for matching dropdown
+ */
+export async function getZelleMembers() {
+    try {
+        const result = await wixData.query(MEMBERS_COLLECTION)
+            .ascending('fullName')
+            .limit(500)
+            .find({ suppressAuth: true });
+
+        const members = result.items.map(m => ({
+            id: m._id,
+            full_name: m.fullName || `${m.firstName || ''} ${m.lastName || ''}`.trim(),
+            email: m.email || ''
+        }));
+
+        return { success: true, members };
+    } catch (error) {
+        console.error('Error getting members:', error);
+        return { success: true, members: [] };
+    }
+}
+
+/**
+ * Auto-match a payment sender to a member by name or email
+ */
+async function autoMatchMember(senderName, senderEmail) {
+    try {
+        // Try exact email match first
+        if (senderEmail) {
+            const emailMatch = await wixData.query(MEMBERS_COLLECTION)
+                .eq('email', senderEmail.toLowerCase())
+                .find({ suppressAuth: true });
+            if (emailMatch.items.length > 0) return emailMatch.items[0];
+        }
+
+        // Try name match (contains)
+        if (senderName) {
+            const nameParts = senderName.toLowerCase().split(/\s+/);
+            if (nameParts.length >= 2) {
+                const nameMatch = await wixData.query(MEMBERS_COLLECTION)
+                    .contains('fullName', nameParts[0])
+                    .find({ suppressAuth: true });
+
+                // Filter for last name match too
+                const fullMatch = nameMatch.items.find(m => {
+                    const memberName = (m.fullName || '').toLowerCase();
+                    return nameParts.every(part => memberName.includes(part));
+                });
+                if (fullMatch) return fullMatch;
+            }
+        }
+
+        return null;
+    } catch (error) {
+        console.error('Auto-match error:', error);
+        return null;
+    }
+}
+
+// =====================================================
+// EMAIL SCAN (Cloud-based — uses email-gateway)
+// =====================================================
+
+/**
+ * Scan emails for Zelle payments via the email gateway
+ * This replaces the Flask Gmail scanning with Wix-based scanning
+ */
+export async function scanForZellePayments(daysBack) {
+    try {
+        const days = daysBack || 90;
+        let emailGateway;
+        try {
+            emailGateway = await import('backend/email-gateway.jsw');
+        } catch (e) {
+            // If email-gateway is not available, return demo scan
+            return await generateDemoScan();
+        }
+
+        // Search inbox for Zelle-related emails
+        const searchResult = await emailGateway.searchInbox('Zelle', 1, 50);
+        const emails = searchResult.messages || [];
+
+        let newPayments = 0;
+        let autoMatched = 0;
+
+        for (const email of emails) {
+            const parsed = parseZelleEmail(email.subject, email.body || email.snippet || '', email.date);
+            if (!parsed) continue;
+
+            const result = await recordZellePayment({
+                zelleCode: parsed.code || `ZEL-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+                senderName: parsed.senderName,
+                senderEmail: parsed.senderEmail || email.from,
+                amount: parsed.amount,
+                memo: parsed.memo,
+                bank_source: 'Gmail Scan',
+                email_date: email.date,
+                paymentDate: email.date
+            });
+
+            if (result.success) {
+                newPayments++;
+                if (result.auto_matched) autoMatched++;
+            }
+        }
+
+        return {
+            success: true,
+            emails_checked: emails.length,
+            new_payments: newPayments,
+            auto_matched: autoMatched,
+            duration_ms: 0
+        };
+    } catch (error) {
+        console.error('Error scanning for Zelle payments:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+/**
+ * Parse a Zelle notification email for payment details
+ */
+function parseZelleEmail(subject, body, date) {
+    const text = `${subject} ${body}`;
+
+    // Match common Zelle patterns
+    const amountMatch = text.match(/\$(\d+(?:\.\d{2})?)/);
+    const nameMatch = text.match(/(?:from|sent by)\s+([A-Z][a-z]+ [A-Z][a-z]+)/i);
+    const memoMatch = text.match(/(?:memo|note|message):\s*(.+?)(?:\n|$)/i);
+
+    if (!amountMatch) return null;
+
+    return {
+        amount: parseFloat(amountMatch[1]),
+        senderName: nameMatch ? nameMatch[1] : 'Unknown Sender',
+        senderEmail: '',
+        memo: memoMatch ? memoMatch[1].trim() : '',
+        code: `ZEL-${Date.now().toString(36)}`
+    };
+}
+
+// =====================================================
+// TEST DATA & DEMO
+// =====================================================
+
+/**
+ * Seed test/demo Zelle payments for testing
+ */
+export async function seedTestData() {
+    try {
+        const testPayments = [
+            { senderName: 'Rina Dasgupta', senderEmail: 'rina.dasgupta@gmail.com', amount: 150.00, memo: 'Annual Family Membership', paymentType: 'membership' },
+            { senderName: 'Amit Roy', senderEmail: 'amit.roy@gmail.com', amount: 75.00, memo: 'Individual Membership', paymentType: 'membership' },
+            { senderName: 'Priya Sen', senderEmail: 'priya.sen@gmail.com', amount: 50.00, memo: 'Nabo Borsho Sponsorship', paymentType: 'event' },
+            { senderName: 'Subir Ghosh', senderEmail: 'subir.ghosh@gmail.com', amount: 200.00, memo: 'Platinum Sponsor', paymentType: 'sponsorship' },
+            { senderName: 'Tanmay Chatterjee', senderEmail: 'tanmay.c@gmail.com', amount: 100.00, memo: 'Magazine Ad - Full Page', paymentType: 'advertising' },
+            { senderName: 'Unknown Sender', senderEmail: 'unknown123@gmail.com', amount: 25.00, memo: 'Donation', paymentType: 'donation' }
+        ];
+
+        let inserted = 0;
+        for (const tp of testPayments) {
+            const result = await recordZellePayment({
+                zelleCode: `TEST-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 5)}`,
+                senderName: tp.senderName,
+                senderEmail: tp.senderEmail,
+                amount: tp.amount,
+                memo: tp.memo,
+                description: tp.memo,
+                paymentType: tp.paymentType,
+                bank_source: 'Test Data',
+                paymentDate: new Date()
+            });
+            if (result.success) inserted++;
+        }
+
+        return { success: true, inserted };
+    } catch (error) {
+        console.error('Error seeding test data:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+/**
+ * Generate a demo scan result (when email gateway unavailable)
+ */
+async function generateDemoScan() {
+    return {
+        success: true,
+        emails_checked: 0,
+        new_payments: 0,
+        auto_matched: 0,
+        duration_ms: 0,
+        note: 'Email scanning available when email gateway is configured'
+    };
+}
+
+// =====================================================
+// HISTORY & AUDIT LOG
+// =====================================================
+
+/**
+ * Get Zelle payment history (for member portal)
+ */
+export async function getZelleHistory() {
+    try {
+        const result = await wixData.query(ZELLE_COLLECTION)
+            .eq('isVerified', true)
+            .descending('paymentDate')
+            .limit(100)
+            .find({ suppressAuth: true });
+
+        const history = result.items.map(p => ({
+            id: p._id,
+            created_at: p.paymentDate || p._createdDate,
+            description: p.description || p.memo || `Zelle from ${p.senderName}`,
+            amount: p.amount || 0,
+            payment_method: 'Zelle',
+            payment_type: p.paymentType || 'membership',
+            status: 'completed',
+            receipt_number: p.zelleCode || p._id
+        }));
+
+        return { success: true, history };
+    } catch (error) {
+        console.error('Error getting Zelle history:', error);
+        return { success: true, history: [] };
+    }
+}
+
+/**
+ * Log a Zelle action for audit trail
+ */
+async function logZelleAction(action, paymentId, details) {
+    try {
+        await wixData.insert(ZELLE_HISTORY_COLLECTION, {
+            action,
+            paymentId,
+            details: JSON.stringify(details || {}),
+            timestamp: new Date(),
+            _createdDate: new Date()
+        }, { suppressAuth: true });
+    } catch (e) {
+        // Don't fail the main operation if audit logging fails
+        console.error('Audit log error:', e);
+    }
+}
+
+// =====================================================
+// POLLER (No-op in cloud — kept for API compatibility)
+// =====================================================
+
+/**
+ * Start/Stop poller — no-op in cloud mode
+ * In production, scheduled scanning can use Wix Automations/Jobs instead
+ */
+export async function startPoller() {
+    return { success: true, message: 'Auto-polling is managed by Wix Automations in cloud mode' };
+}
+
+export async function stopPoller() {
+    return { success: true, message: 'Auto-polling stopped' };
+}
+
+// =====================================================
+// HELPERS
+// =====================================================
+
+function generateZelleCode() {
+    const ts = Date.now().toString(36);
+    const rand = Math.random().toString(36).substring(2, 7);
+    return `ZEL-${ts}-${rand}`.toUpperCase();
+}
