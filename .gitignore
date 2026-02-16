@@ -27,3 +27,10 @@ npm-debug.log*
 
 # Wix CLI
 .wix/
+
+# Local scripts with secrets
+start_wix_dev.cmd
+*.cmd
+find_admin_imports*.js
+logs/
+publish_log.txt
