@@ -57,18 +57,27 @@
             margin: 0;
             padding: 0;
             overflow-x: hidden;
+            overflow-y: auto;
             /* Content flows naturally - no fixed height constraint */
         }
         
         /* Fix for Wix iframe embedding - make content visible */
         .wix-embed-mode {
-            min-height: 100vh !important;
-            /* Removed height: 100% which was causing the compression */
+            min-height: auto !important;
+            /* Let actual content determine height — removes phantom scrollbar space */
         }
-        
-        /* Ensure all content sections have proper display */
-        section {
-            display: block;
+
+/* When embedded in Wix iframe, reduce hero top padding since Wix provides nav */
+.wix-embed-mode .hero {
+    padding-top: 20px !important;
+}
+
+/* On standalone (GitHub Pages), keep standard padding */
+@media (max-width: 768px) {
+    .wix-embed-mode .hero {
+        padding-top: 15px !important;
+    }
+}
             position: relative;
         }
         
@@ -310,6 +319,7 @@
         section { padding: 2.5rem 0; }
         section.py-5 { padding-top: 2.5rem !important; padding-bottom: 2.5rem !important; }
         section.py-4 { padding-top: 2rem !important; padding-bottom: 2rem !important; }
+        .py-5 { padding-top: 2.5rem !important; padding-bottom: 2.5rem !important; }
         .section-header {
             text-align: center;
             margin-bottom: 1.5rem;
@@ -1133,7 +1143,7 @@
         @media (max-width: 768px) {
             .hero h1 { font-size: 2.2rem; }
             .hero-bengali { font-size: 1.4rem; }
-            .hero { padding: 2rem 1rem; }
+            .hero { padding: 80px 1rem 2rem 1rem; }
             .hero-subtitle { font-size: 1rem; }
             .hero-buttons { flex-direction: column; gap: 0.5rem; }
             .hero-buttons .btn-primary-custom,
@@ -1144,6 +1154,8 @@
             .pricing-card.featured { transform: scale(1); }
             .pricing-card.featured:hover { transform: scale(1); }
             section { padding: 2rem 0; }
+            section.py-5, .py-5 { padding-top: 1.5rem !important; padding-bottom: 1.5rem !important; }
+            .section-header { margin-bottom: 1rem; }
             .section-header h2 { font-size: 1.8rem; }
             /* Quick Access Bar — horizontal scroll on mobile */
             .quick-access .row { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; scroll-snap-type: x mandatory; padding-bottom: 0.5rem; }
@@ -1162,6 +1174,9 @@
             .hero-bengali { font-size: 1.1rem; }
             .stat-number { font-size: 2rem; }
             .stat-label { font-size: 0.7rem; }
+            section { padding: 1.5rem 0; }
+            section.py-5, .py-5 { padding-top: 1rem !important; padding-bottom: 1rem !important; }
+            .section-header { margin-bottom: 0.75rem; }
             .section-header h2 { font-size: 1.4rem; }
             .section-header p { font-size: 0.85rem; }
             .ec-card h6 { font-size: 0.8rem; }
@@ -1171,7 +1186,7 @@
         /* ===== iPhone SE / very small phones (375px and below) ===== */
         @media (max-width: 375px) {
             /* Hero — tighter fit */
-            .hero { min-height: 55vh; padding: 2rem 0.5rem; }
+            .hero { min-height: 55vh; padding: 80px 0.5rem 2rem 0.5rem; }
             .hero h1 { font-size: 1.35rem; line-height: 1.3; }
             .hero-subtitle { font-size: 0.8rem; line-height: 1.4; padding: 0 0.25rem; }
             .hero-bengali { font-size: 0.95rem; }
@@ -1353,13 +1368,13 @@
                     </a>
                 </div>
                 <div class="col">
-                    <a href="#magazine" class="quick-item" data-action="magazine" title="magazine.jsw → getPublishedMagazines()">
+                    <a href="#magazine" class="quick-item" data-action="magazine" title="magazine.jsw → getPublishedMagazines()" onclick="scrollToSection('magazine'); return false;">
                         <i class="fas fa-book-open"></i>
                         <span>Magazine</span>
                     </a>
                 </div>
                 <div class="col">
-                    <a href="#guide" class="quick-item" data-action="guide" title="guide.jsw → getGuideByCategory()">
+                    <a href="#guide" class="quick-item" data-action="guide" title="guide.jsw → getGuideByCategory()" onclick="scrollToSection('guide'); return false;">
                         <i class="fas fa-map-marked-alt"></i>
                         <span>Jax Guide</span>
                     </a>
@@ -1377,7 +1392,7 @@
                     </a>
                 </div>
                 <div class="col">
-                    <a href="#sponsors" class="quick-item" data-action="sponsors" title="sponsorship.jsw → getSponsors()">
+                    <a href="#sponsors" class="quick-item" data-action="sponsors" title="sponsorship.jsw → getSponsors()" onclick="scrollToSection('sponsors'); return false;">
                         <i class="fas fa-handshake"></i>
                         <span>Sponsors</span>
                     </a>
@@ -1522,11 +1537,11 @@
                 <div class="quick-links">
                     <a href="#radio" class="quick-link"><i class="fas fa-broadcast-tower"></i> BANF Radio</a>
                     <a href="#events" class="quick-link"><i class="fas fa-calendar"></i> Events</a>
-                    <a href="#surveys" class="quick-link" onclick="openSurveySection()"><i class="fas fa-poll"></i> Surveys</a>
-                    <a href="#complaints" class="quick-link" onclick="openComplaintForm()"><i class="fas fa-shield-alt"></i> Complaints</a>
-                    <a href="#guide" class="quick-link"><i class="fas fa-map-marked-alt"></i> Jax Guide</a>
-                    <a href="#magazine" class="quick-link"><i class="fas fa-book-open"></i> E-Magazine</a>
-                    <a href="#sponsors" class="quick-link"><i class="fas fa-handshake"></i> Sponsors</a>
+                    <a href="#surveys" class="quick-link" onclick="openSurveySection(); return false;"><i class="fas fa-poll"></i> Surveys</a>
+                    <a href="#complaints" class="quick-link" onclick="openComplaintForm(); return false;"><i class="fas fa-shield-alt"></i> Complaints</a>
+                    <a href="#guide" class="quick-link" onclick="scrollToSection('guide'); return false;"><i class="fas fa-map-marked-alt"></i> Jax Guide</a>
+                    <a href="#magazine" class="quick-link" onclick="scrollToSection('magazine'); return false;"><i class="fas fa-book-open"></i> E-Magazine</a>
+                    <a href="#sponsors" class="quick-link" onclick="scrollToSection('sponsors'); return false;"><i class="fas fa-handshake"></i> Sponsors</a>
                 </div>
             </div>
             
@@ -1625,7 +1640,7 @@
                     <div class="service-icon" style="background: linear-gradient(135deg, #E91E63, #FF5722);"><i class="fas fa-book-open"></i></div>
                     <h5>E-Magazine</h5>
                     <p>Browse issues, read articles by category, search content, and submit your own literary works.</p>
-                    <a href="#magazine" class="service-link" data-action="magazine">
+                    <a href="#magazine" class="service-link" data-action="magazine" onclick="scrollToSection('magazine'); return false;">
                         Read Now <i class="fas fa-arrow-right"></i>
                     </a>
                 </div>
@@ -1635,7 +1650,7 @@
                     <div class="service-icon" style="background: linear-gradient(135deg, #00BCD4, #009688);"><i class="fas fa-map-marked-alt"></i></div>
                     <h5>Jacksonville Guide</h5>
                     <p>Find Bengali restaurants, grocery stores, doctors, schools. Read reviews and submit new listings.</p>
-                    <a href="#guide" class="service-link" data-action="guide">
+                    <a href="#guide" class="service-link" data-action="guide" onclick="scrollToSection('guide'); return false;">
                         Explore Guide <i class="fas fa-arrow-right"></i>
                     </a>
                 </div>
@@ -1645,7 +1660,7 @@
                     <div class="service-icon" style="background: linear-gradient(135deg, #FF9800, #FFC107);"><i class="fas fa-poll"></i></div>
                     <h5>Community Surveys</h5>
                     <p>Participate in community polls and surveys. Share your voice anonymously or as a member.</p>
-                    <a href="#surveys" class="service-link" data-action="surveys" onclick="openSurveySection()">
+                    <a href="#surveys" class="service-link" data-action="surveys" onclick="openSurveyModal(); return false;">
                         Take Survey <i class="fas fa-arrow-right"></i>
                     </a>
                 </div>
@@ -1665,7 +1680,7 @@
                     <div class="service-icon" style="background: linear-gradient(135deg, #795548, #8D6E63);"><i class="fas fa-file-alt"></i></div>
                     <h5>Meeting Minutes</h5>
                     <p>Members can access meeting summaries, decisions, and action items from EC meetings.</p>
-                    <a href="#" class="service-link" data-action="login" onclick="openMemberLoginModal()" title="Members only - Login required">
+                    <a href="#" class="service-link" data-action="login" onclick="openMemberLoginModal(); return false;" title="Members only - Login required">
                         View Minutes <i class="fas fa-lock ms-1"></i>
                     </a>
                 </div>
@@ -1675,7 +1690,7 @@
                     <div class="service-icon" style="background: linear-gradient(135deg, #D4AF37, #FFD700);"><i class="fas fa-handshake"></i></div>
                     <h5>Become a Sponsor</h5>
                     <p>Support BANF as a Platinum, Gold, Silver, or Bronze sponsor. Magazine ads & food sponsorships.</p>
-                    <a href="#sponsors" class="service-link" data-action="sponsors">
+                    <a href="#sponsors" class="service-link" data-action="sponsors" onclick="scrollToSection('sponsors'); return false;">
                         Learn More <i class="fas fa-arrow-right"></i>
                     </a>
                 </div>
@@ -3204,13 +3219,65 @@
             'Traditional_Music': { name: 'Traditional Music', icon: '🎼', color: '#CD853F' }
         };
         
-        // Fallback local stations (when API unavailable)
+        // Fallback internet radio streams (verified working HTTPS - tested Feb 2026)
         const fallbackStations = [
-            { name: 'BANF Radio - Classical', url: '/static/audio/classical_mix.mp3', category: 'Classical_Music' },
-            { name: 'BANF Radio - Folk', url: '/static/audio/folk_mix.mp3', category: 'Folk_Music' },
-            { name: 'BANF Radio - Modern', url: '/static/audio/modern_mix.mp3', category: 'Modern_Music' }
+            { name: 'SomaFM Suburbs of Goa', url: 'https://ice4.somafm.com/suburbsofgoa-128-aac', category: 'Modern_Music' },
+            { name: 'Bombay Beats Radio', url: 'https://strmreg.1.fm/bombaybeats_mobile_mp3', category: 'Modern_Music' },
+            { name: 'Monocle World Radio', url: 'https://playerservices.streamtheworld.com/api/livestream-redirect/MONOCLE_24.mp3', category: 'Modern_Music' },
+            { name: 'Radio Mirchi USA', url: 'https://streams.radio.co/s8d06d0298/listen', category: 'Modern_Music' },
+            { name: 'Mixify Bollywood', url: 'https://server.mixify.in/listen/listen/radio.mp3', category: 'Modern_Music' },
+            { name: 'MixiFy Hindi Hits', url: 'https://server.mixify.in/listen/new_hits/radio.mp3', category: 'Modern_Music' },
+            { name: 'Radio Udaan 256kbps', url: 'https://stream.radioudaan.com/listen/radio_udaan/radio.mp3', category: 'Family_Entertainment' },
+            { name: 'Himal Hindi Classic', url: 'https://streaming.webhostnepal.com/8012/stream', category: 'Classical_Music' },
+            { name: 'SomaFM Goa Lounge', url: 'https://ice5.somafm.com/suburbsofgoa-64-aac', category: 'Traditional_Music' },
+            { name: 'Radio Digital Indian', url: 'https://radio.digitalmalayali.in/listen/stream/radio.mp3', category: 'Folk_Music' }
         ];
         let currentStationIndex = 0;
+        
+        /**
+         * Discover live Bengali/Indian radio streams from RadioBrowser API
+         * Runs once on page load to supplement fallback stations with live data
+         */
+        async function discoverLiveStations() {
+            // Search multiple tags to maximize chances of finding working Indian/Bengali streams
+            const searchTags = ['bengali', 'hindi', 'bollywood', 'indian'];
+            let totalDiscovered = 0;
+            
+            for (const tag of searchTags) {
+                try {
+                    const controller = new AbortController();
+                    setTimeout(() => controller.abort(), 5000);
+                    const response = await fetch(
+                        `https://de1.api.radio-browser.info/json/stations/search?tag=${tag}&limit=8&order=clickcount&reverse=true&hidebroken=true&has_extended_info=true`,
+                        { signal: controller.signal }
+                    );
+                    const stations = await response.json();
+                    const httpsStations = stations.filter(s => 
+                        s.url_resolved && 
+                        s.url_resolved.startsWith('https://') &&
+                        (s.codec === 'MP3' || s.codec === 'AAC' || s.codec === 'AAC+')
+                    );
+                    httpsStations.forEach(s => {
+                        // Don't add duplicates
+                        if (!fallbackStations.some(fs => fs.url === s.url_resolved)) {
+                            fallbackStations.push({
+                                name: s.name || `${tag.charAt(0).toUpperCase() + tag.slice(1)} Radio`,
+                                url: s.url_resolved,
+                                category: 'Modern_Music'
+                            });
+                            totalDiscovered++;
+                        }
+                    });
+                } catch (e) {
+                    // Continue with next tag
+                }
+            }
+            if (totalDiscovered > 0) {
+                console.log(`📻 Discovered ${totalDiscovered} additional live radio streams`);
+            }
+        }
+        // Discover live stations on page load (non-blocking)
+        discoverLiveStations();
 
         /**
          * Initialize Radio Player
@@ -3228,10 +3295,10 @@
             
             // Create audio element
             radioAudio = new Audio();
-            radioAudio.crossOrigin = 'anonymous';
             
             radioAudio.addEventListener('playing', () => {
                 isRadioPlaying = true;
+                radioAudio._retryCount = 0; // Reset retries on success
                 updatePlayButton(true);
                 updateNowPlaying();
             });
@@ -3243,16 +3310,35 @@
             
             radioAudio.addEventListener('error', (e) => {
                 console.warn('Radio stream error:', e);
-                updateNowPlaying('Stream unavailable - try another station');
+                // Auto-try next station on error (up to 3 attempts)
+                if (!radioAudio._retryCount) radioAudio._retryCount = 0;
+                radioAudio._retryCount++;
+                if (radioAudio._retryCount <= 3 && isRadioPlaying) {
+                    currentStationIndex = (currentStationIndex + 1) % fallbackStations.length;
+                    updateNowPlaying('Trying next station...');
+                    radioAudio.src = fallbackStations[currentStationIndex].url;
+                    radioAudio.play().catch(() => {
+                        updateNowPlaying('No stations available — try again later');
+                        isRadioPlaying = false;
+                        updatePlayButton(false);
+                    });
+                } else {
+                    radioAudio._retryCount = 0;
+                    updateNowPlaying('Stream unavailable — click ▶ to retry');
+                    isRadioPlaying = false;
+                    updatePlayButton(false);
+                }
             });
         }
 
         /**
-         * Toggle Radio Play/Pause - Uses existing API
+         * Toggle Radio Play/Pause - Uses existing API with robust fallback
          */
         async function toggleRadio() {
+            // If radioAudio not yet created (initRadioPlayer hasn't run), create it with proper handlers
             if (!radioAudio) {
-                radioAudio = new Audio();
+                initRadioPlayer();
+                if (!radioAudio) return; // Safety: no radio controls found
             }
             
             if (isRadioPlaying) {
@@ -3260,61 +3346,87 @@
                 radioAudio.src = '';
                 isRadioPlaying = false;
                 updatePlayButton(false);
+                updateNowPlaying('Paused — Click play to resume');
             } else {
+                updateNowPlaying('Connecting to stream...');
+                updatePlayButton(true);
+                
+                let streamStarted = false;
+                
                 try {
-                    // Try to start from API first
-                    const response = await fetch(RADIO_ENDPOINTS.startCurrent, { method: 'POST' });
+                    // Try to start from API first (with short timeout)
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), 3000);
+                    
+                    const response = await fetch(RADIO_ENDPOINTS.startCurrent, { 
+                        method: 'POST',
+                        signal: controller.signal
+                    });
+                    clearTimeout(timeoutId);
                     const data = await response.json();
                     
                     if (data.stream_url) {
                         radioAudio.src = data.stream_url;
                         currentProgram = data;
                         updateNowPlayingFromAPI(data);
-                    } else {
-                        // Fallback to local stations
-                        radioAudio.src = fallbackStations[currentStationIndex].url;
-                        updateNowPlaying();
+                        streamStarted = true;
                     }
                 } catch (error) {
-                    console.warn('API unavailable, using fallback:', error);
+                    console.warn('API unavailable, using fallback streams:', error.message);
+                }
+                
+                if (!streamStarted) {
+                    // Use fallback internet radio streams
                     radioAudio.src = fallbackStations[currentStationIndex].url;
                     updateNowPlaying();
                 }
                 
-                radioAudio.play().catch(err => {
-                    console.warn('Auto-play blocked:', err);
+                try {
+                    await radioAudio.play();
+                    isRadioPlaying = true;
+                    updatePlayButton(true);
+                } catch (err) {
+                    console.warn('Play failed:', err);
                     updateNowPlaying('Click play again to start');
-                });
+                    isRadioPlaying = false;
+                    updatePlayButton(false);
+                }
             }
         }
 
         /**
-         * Skip to Next/Previous Track - Uses existing API
+         * Skip to Next/Previous Track - Uses existing API with fallback
          */
         async function skipStation(direction) {
             try {
                 const endpoint = direction > 0 ? RADIO_ENDPOINTS.nextTrack : RADIO_ENDPOINTS.previousTrack;
-                const response = await fetch(endpoint, { method: 'POST' });
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 3000);
+                
+                const response = await fetch(endpoint, { method: 'POST', signal: controller.signal });
+                clearTimeout(timeoutId);
                 const data = await response.json();
                 
                 if (data.stream_url) {
                     if (isRadioPlaying) {
                         radioAudio.src = data.stream_url;
-                        radioAudio.play();
+                        radioAudio.play().catch(() => {});
                     }
                     currentProgram = data;
                     updateNowPlayingFromAPI(data);
                     return;
                 }
             } catch (error) {
-                console.warn('API skip failed, using fallback:', error);
+                console.warn('API skip unavailable, using fallback:', error.message);
             }
             
-            // Fallback to local stations
+            // Fallback to internet radio streams
             currentStationIndex = (currentStationIndex + direction + fallbackStations.length) % fallbackStations.length;
             if (isRadioPlaying) {
                 radioAudio.src = fallbackStations[currentStationIndex].url;
-                radioAudio.play();
+                radioAudio.play().catch(() => {
+                    updateNowPlaying('Stream unavailable — try another station');
+                });
             }
             updateNowPlaying();
         }
@@ -3331,18 +3443,23 @@
         }
         
         /**
-         * Fetch current schedule from API
+         * Fetch current schedule from API (with timeout)
          */
         async function fetchCurrentSchedule() {
             try {
-                const response = await fetch(RADIO_ENDPOINTS.currentStatus);
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 3000);
+                
+                const response = await fetch(RADIO_ENDPOINTS.currentStatus, { signal: controller.signal });
+                clearTimeout(timeoutId);
                 const data = await response.json();
                 if (data && data.current_program) {
                     currentProgram = data.current_program;
                     updateNowPlayingFromAPI(data.current_program);
                 }
             } catch (error) {
-                console.warn('Could not fetch schedule:', error);
+                console.warn('Schedule API unavailable — using fallback display');
+                updateNowPlaying('🎵 BANF Radio — Click play to start');
             }
         }
 
@@ -3484,11 +3601,13 @@
             }
         }
 
-        // Smooth scroll for anchor links
-        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+        // Smooth scroll for anchor links (skip links with onclick handlers to avoid conflicts)
+        document.querySelectorAll('a[href^="#"]:not([onclick])').forEach(anchor => {
             anchor.addEventListener('click', function (e) {
+                const href = this.getAttribute('href');
+                if (!href || href === '#') return; // Skip bare # links
                 e.preventDefault();
-                const target = document.querySelector(this.getAttribute('href'));
+                const target = document.querySelector(href);
                 if (target) {
                     target.scrollIntoView({
                         behavior: 'smooth',
@@ -3508,19 +3627,7 @@
             }
         });
 
-        // Radio play button simulation
-        document.querySelectorAll('.radio-btn').forEach(btn => {
-            btn.addEventListener('click', function() {
-                const icon = this.querySelector('i');
-                if (icon.classList.contains('fa-play')) {
-                    icon.classList.remove('fa-play');
-                    icon.classList.add('fa-pause');
-                } else if (icon.classList.contains('fa-pause')) {
-                    icon.classList.remove('fa-pause');
-                    icon.classList.add('fa-play');
-                }
-            });
-        });
+        // Radio play button icon toggling is handled by initRadioPlayer() → updatePlayButton()
 
         // Form submission (prevent default for demo)
         document.querySelector('.contact-form')?.addEventListener('submit', function(e) {
@@ -7742,27 +7849,31 @@
                 case 'login':
                     document.getElementById('loginForm').style.display = 'block';
                     document.getElementById('login-tab').classList.add('active');
+                    hideStatusMessage();
                     break;
                 case 'signup':
                     document.getElementById('signupForm').style.display = 'block';
                     document.getElementById('signup-tab').classList.add('active');
+                    hideStatusMessage();
                     break;
                 case 'code':
                     document.getElementById('codeForm').style.display = 'block';
                     document.getElementById('code-tab').classList.add('active');
+                    // Don't hide status - user needs to see the registration code
                     break;
                 case 'setup':
                     document.getElementById('setupForm').style.display = 'block';
+                    // Don't hide status - user needs to see "Code verified" message
                     break;
                 case 'forgot':
                     document.getElementById('forgotForm').style.display = 'block';
+                    hideStatusMessage();
                     break;
                 case 'profile':
                     document.getElementById('profileSection').style.display = 'block';
+                    hideStatusMessage();
                     break;
             }
-            
-            hideStatusMessage();
         }
 
         // ========== DEMO/TEST MODE DATA ==========
@@ -8165,6 +8276,20 @@
             }
             console.log('✅ Portal closed');
         }
+
+        // Safety: Escape key closes portal and restores scrolling
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                const overlay = document.getElementById('memberPortalOverlay');
+                if (overlay && overlay.style.display === 'block') {
+                    closeFullPortal();
+                }
+                // Always restore body overflow as safety net
+                if (document.body.style.overflow === 'hidden') {
+                    document.body.style.overflow = '';
+                }
+            }
+        });
         
         /**
          * Toggle portal sidebar drawer on mobile (≤576px)
@@ -9752,13 +9877,19 @@
                 return false;
             }
             
-            // Validate username
-            if (!username) {
-                showStatusMessage('error', '<i class="fas fa-exclamation-circle me-2"></i>Please choose a username.');
-                return false;
-            }
-            
+            // If username is empty, use email from registration
             const registrationId = document.getElementById('setupRegistrationId').value;
+            let finalUsername = username;
+            if (!finalUsername) {
+                // Auto-fill from registration email
+                const reg = DemoData.pendingRegistrations[registrationId];
+                if (reg && reg.email) {
+                    finalUsername = reg.email.toLowerCase();
+                } else {
+                    showStatusMessage('error', '<i class="fas fa-exclamation-circle me-2"></i>Please choose a username.');
+                    return false;
+                }
+            }
             
             showStatusMessage('info', '<i class="fas fa-spinner fa-spin me-2"></i>Creating your account...');
             
@@ -9768,7 +9899,7 @@
             // Demo mode - complete registration
             const registration = DemoData.pendingRegistrations[registrationId];
             if (registration) {
-                registration.username = username.toLowerCase();
+                registration.username = finalUsername.toLowerCase();
                 registration.password = password;
                 registration.completed = true;
                 registration.memberData = {
@@ -9798,7 +9929,7 @@
                 showStatusMessage('success', 
                     `<i class="fas fa-party-horn me-2"></i><strong>Account created successfully!</strong>
                     <br>Welcome to BANF, ${registration.firstName}!
-                    <br><br><small class="text-warning">Your login: <code>${username}</code> / your chosen password</small>
+                    <br><br><small class="text-warning">Your login: <code>${finalUsername}</code> / your chosen password</small>
                     <br><small class="text-muted">(Demo Mode)</small>`);
                 
                 updateProfileDisplay(MemberPortal.member);
@@ -10029,7 +10160,9 @@
         function scrollToSection(sectionId) {
             const section = document.getElementById(sectionId);
             if (section) {
-                section.scrollIntoView({ behavior: 'smooth' });
+                const navbarHeight = document.querySelector('.navbar')?.offsetHeight || 60;
+                const y = section.getBoundingClientRect().top + window.pageYOffset - navbarHeight - 10;
+                window.scrollTo({ top: y, behavior: 'smooth' });
             }
         }
         
@@ -10145,8 +10278,8 @@
          * Open Survey Section
          */
         function openSurveySection() {
-            // Navigate to surveys
-            scrollToSection('surveys');
+            // Open the survey modal directly for better UX
+            openSurveyModal();
         }
         
         /**
@@ -10265,20 +10398,14 @@
          * Calculate actual document height including all content
          */
         function getDocumentHeight() {
-            const body = document.body;
-            const html = document.documentElement;
-            
-            // Get the maximum of all possible height values
-            const height = Math.max(
-                body.scrollHeight,
-                body.offsetHeight,
-                html.clientHeight,
-                html.scrollHeight,
-                html.offsetHeight
-            );
-            
-            // Add some padding to ensure no content is cut off
-            return height + 100;
+            // Calculate actual content height — no phantom padding
+            const lastSection = document.querySelector('body > section:last-of-type, body > footer, body > div:last-of-type');
+            if (lastSection) {
+                const rect = lastSection.getBoundingClientRect();
+                return Math.ceil(rect.bottom + window.pageYOffset);
+            }
+            // Fallback: use scrollHeight (most accurate single value)
+            return document.body.scrollHeight;
         }
 
         /**
@@ -11010,6 +11137,14 @@
                 }
             });
             
+            // Use ResizeObserver for accurate dynamic height tracking
+            if (typeof ResizeObserver !== 'undefined') {
+                const ro = new ResizeObserver(() => {
+                    sendHeightToWix();
+                });
+                ro.observe(document.body);
+            }
+
             console.log('[BANF Embed] Running in embed mode with internal scrolling');
         }
 
