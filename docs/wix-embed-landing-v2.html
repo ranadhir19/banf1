@@ -66,10 +66,18 @@
             min-height: auto !important;
             /* Let actual content determine height — removes phantom scrollbar space */
         }
-        
-        /* Ensure all content sections have proper display */
-        section {
-            display: block;
+
+/* When embedded in Wix iframe, reduce hero top padding since Wix provides nav */
+.wix-embed-mode .hero {
+    padding-top: 20px !important;
+}
+
+/* On standalone (GitHub Pages), keep standard padding */
+@media (max-width: 768px) {
+    .wix-embed-mode .hero {
+        padding-top: 15px !important;
+    }
+}
             position: relative;
         }
         
@@ -1652,7 +1660,7 @@
                     <div class="service-icon" style="background: linear-gradient(135deg, #FF9800, #FFC107);"><i class="fas fa-poll"></i></div>
                     <h5>Community Surveys</h5>
                     <p>Participate in community polls and surveys. Share your voice anonymously or as a member.</p>
-                    <a href="#surveys" class="service-link" data-action="surveys" onclick="openSurveySection()">
+                    <a href="#surveys" class="service-link" data-action="surveys" onclick="openSurveyModal(); return false;">
                         Take Survey <i class="fas fa-arrow-right"></i>
                     </a>
                 </div>
@@ -1672,7 +1680,7 @@
                     <div class="service-icon" style="background: linear-gradient(135deg, #795548, #8D6E63);"><i class="fas fa-file-alt"></i></div>
                     <h5>Meeting Minutes</h5>
                     <p>Members can access meeting summaries, decisions, and action items from EC meetings.</p>
-                    <a href="#" class="service-link" data-action="login" onclick="openMemberLoginModal()" title="Members only - Login required">
+                    <a href="#" class="service-link" data-action="login" onclick="openMemberLoginModal(); return false;" title="Members only - Login required">
                         View Minutes <i class="fas fa-lock ms-1"></i>
                     </a>
                 </div>
@@ -3211,15 +3219,18 @@
             'Traditional_Music': { name: 'Traditional Music', icon: '🎼', color: '#CD853F' }
         };
         
-        // Fallback internet radio streams (verified working public streams - HTTPS)
+        // Fallback internet radio streams (verified working HTTPS - tested Feb 2026)
         const fallbackStations = [
-            { name: 'Bengali Hits - Mixify', url: 'https://stream.zeno.fm/cz2f2gahap8uv', category: 'Modern_Music' },
-            { name: 'My 90s Bengali', url: 'https://stream.zeno.fm/m5a9r5xaqhquv', category: 'Classical_Music' },
-            { name: 'Radio GoonGoon Bengali', url: 'https://stream.zeno.fm/2r9nrge0y98uv', category: 'Folk_Music' },
-            { name: 'Bollywood Hits', url: 'https://stream.zeno.fm/bwf0y73m5v8uv', category: 'Modern_Music' },
-            { name: 'Radio Udaan Hindi', url: 'https://stream.zeno.fm/3n9rsknp5v8uv', category: 'Family_Entertainment' },
-            { name: 'Bollywood 2000s', url: 'https://radio.uber.space/hindi2000/hindi2000.aac', category: 'Modern_Music' },
-            { name: 'Radio Aashiqanaa 90s', url: 'https://stream.zeno.fm/hra04frnp18uv', category: 'Traditional_Music' }
+            { name: 'SomaFM Suburbs of Goa', url: 'https://ice4.somafm.com/suburbsofgoa-128-aac', category: 'Modern_Music' },
+            { name: 'Bombay Beats Radio', url: 'https://strmreg.1.fm/bombaybeats_mobile_mp3', category: 'Modern_Music' },
+            { name: 'Monocle World Radio', url: 'https://playerservices.streamtheworld.com/api/livestream-redirect/MONOCLE_24.mp3', category: 'Modern_Music' },
+            { name: 'Radio Mirchi USA', url: 'https://streams.radio.co/s8d06d0298/listen', category: 'Modern_Music' },
+            { name: 'Mixify Bollywood', url: 'https://server.mixify.in/listen/listen/radio.mp3', category: 'Modern_Music' },
+            { name: 'MixiFy Hindi Hits', url: 'https://server.mixify.in/listen/new_hits/radio.mp3', category: 'Modern_Music' },
+            { name: 'Radio Udaan 256kbps', url: 'https://stream.radioudaan.com/listen/radio_udaan/radio.mp3', category: 'Family_Entertainment' },
+            { name: 'Himal Hindi Classic', url: 'https://streaming.webhostnepal.com/8012/stream', category: 'Classical_Music' },
+            { name: 'SomaFM Goa Lounge', url: 'https://ice5.somafm.com/suburbsofgoa-64-aac', category: 'Traditional_Music' },
+            { name: 'Radio Digital Indian', url: 'https://radio.digitalmalayali.in/listen/stream/radio.mp3', category: 'Folk_Music' }
         ];
         let currentStationIndex = 0;
         
@@ -3228,30 +3239,41 @@
          * Runs once on page load to supplement fallback stations with live data
          */
         async function discoverLiveStations() {
-            try {
-                const controller = new AbortController();
-                setTimeout(() => controller.abort(), 5000);
-                const response = await fetch(
-                    'https://de1.api.radio-browser.info/json/stations/search?tag=bengali&limit=10&order=clickcount&reverse=true&hidebroken=true&has_extended_info=true',
-                    { signal: controller.signal }
-                );
-                const stations = await response.json();
-                const httpsStations = stations.filter(s => s.url_resolved && s.url_resolved.startsWith('https://'));
-                httpsStations.forEach(s => {
-                    // Don't add duplicates
-                    if (!fallbackStations.some(fs => fs.url === s.url_resolved)) {
-                        fallbackStations.push({
-                            name: s.name || 'Bengali Radio',
-                            url: s.url_resolved,
-                            category: 'Modern_Music'
-                        });
-                    }
-                });
-                if (httpsStations.length > 0) {
-                    console.log(`📻 Discovered ${httpsStations.length} live Bengali radio streams`);
+            // Search multiple tags to maximize chances of finding working Indian/Bengali streams
+            const searchTags = ['bengali', 'hindi', 'bollywood', 'indian'];
+            let totalDiscovered = 0;
+            
+            for (const tag of searchTags) {
+                try {
+                    const controller = new AbortController();
+                    setTimeout(() => controller.abort(), 5000);
+                    const response = await fetch(
+                        `https://de1.api.radio-browser.info/json/stations/search?tag=${tag}&limit=8&order=clickcount&reverse=true&hidebroken=true&has_extended_info=true`,
+                        { signal: controller.signal }
+                    );
+                    const stations = await response.json();
+                    const httpsStations = stations.filter(s => 
+                        s.url_resolved && 
+                        s.url_resolved.startsWith('https://') &&
+                        (s.codec === 'MP3' || s.codec === 'AAC' || s.codec === 'AAC+')
+                    );
+                    httpsStations.forEach(s => {
+                        // Don't add duplicates
+                        if (!fallbackStations.some(fs => fs.url === s.url_resolved)) {
+                            fallbackStations.push({
+                                name: s.name || `${tag.charAt(0).toUpperCase() + tag.slice(1)} Radio`,
+                                url: s.url_resolved,
+                                category: 'Modern_Music'
+                            });
+                            totalDiscovered++;
+                        }
+                    });
+                } catch (e) {
+                    // Continue with next tag
                 }
-            } catch (e) {
-                console.warn('RadioBrowser API unavailable:', e.message);
+            }
+            if (totalDiscovered > 0) {
+                console.log(`📻 Discovered ${totalDiscovered} additional live radio streams`);
             }
         }
         // Discover live stations on page load (non-blocking)
@@ -3313,20 +3335,10 @@
          * Toggle Radio Play/Pause - Uses existing API with robust fallback
          */
         async function toggleRadio() {
+            // If radioAudio not yet created (initRadioPlayer hasn't run), create it with proper handlers
             if (!radioAudio) {
-                radioAudio = new Audio();
-                radioAudio.addEventListener('error', () => {
-                    console.warn('Radio stream error, trying next station...');
-                    // Try next fallback station on error
-                    currentStationIndex = (currentStationIndex + 1) % fallbackStations.length;
-                    radioAudio.src = fallbackStations[currentStationIndex].url;
-                    updateNowPlaying();
-                    radioAudio.play().catch(() => {
-                        updateNowPlaying('Unable to play - please try again');
-                        isRadioPlaying = false;
-                        updatePlayButton(false);
-                    });
-                });
+                initRadioPlayer();
+                if (!radioAudio) return; // Safety: no radio controls found
             }
             
             if (isRadioPlaying) {
@@ -10148,7 +10160,9 @@
         function scrollToSection(sectionId) {
             const section = document.getElementById(sectionId);
             if (section) {
-                section.scrollIntoView({ behavior: 'smooth' });
+                const navbarHeight = document.querySelector('.navbar')?.offsetHeight || 60;
+                const y = section.getBoundingClientRect().top + window.pageYOffset - navbarHeight - 10;
+                window.scrollTo({ top: y, behavior: 'smooth' });
             }
         }
         
@@ -10264,8 +10278,8 @@
          * Open Survey Section
          */
         function openSurveySection() {
-            // Navigate to surveys
-            scrollToSection('surveys');
+            // Open the survey modal directly for better UX
+            openSurveyModal();
         }
         
         /**
@@ -10384,20 +10398,14 @@
          * Calculate actual document height including all content
          */
         function getDocumentHeight() {
-            const body = document.body;
-            const html = document.documentElement;
-            
-            // Get the maximum of all possible height values
-            const height = Math.max(
-                body.scrollHeight,
-                body.offsetHeight,
-                html.clientHeight,
-                html.scrollHeight,
-                html.offsetHeight
-            );
-            
-            // Add some padding to ensure no content is cut off
-            return height + 100;
+            // Calculate actual content height — no phantom padding
+            const lastSection = document.querySelector('body > section:last-of-type, body > footer, body > div:last-of-type');
+            if (lastSection) {
+                const rect = lastSection.getBoundingClientRect();
+                return Math.ceil(rect.bottom + window.pageYOffset);
+            }
+            // Fallback: use scrollHeight (most accurate single value)
+            return document.body.scrollHeight;
         }
 
         /**
@@ -11129,6 +11137,14 @@
                 }
             });
             
+            // Use ResizeObserver for accurate dynamic height tracking
+            if (typeof ResizeObserver !== 'undefined') {
+                const ro = new ResizeObserver(() => {
+                    sendHeightToWix();
+                });
+                ro.observe(document.body);
+            }
+
             console.log('[BANF Embed] Running in embed mode with internal scrolling');
         }
 
