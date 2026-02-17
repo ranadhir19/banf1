@@ -1061,6 +1061,188 @@
             background: #f8f9fa;
         }
 
+        /* ========== MEMBERSHIP BENEFITS TABS & EVENT MATRIX ========== */
+        .membership-tabs {
+            display: flex;
+            justify-content: center;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+            margin-bottom: 2rem;
+        }
+        .membership-tab-btn {
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.25);
+            color: #fff;
+            padding: 0.6rem 1.5rem;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-weight: 500;
+            font-size: 0.9rem;
+        }
+        .membership-tab-btn:hover {
+            background: rgba(255,255,255,0.2);
+            border-color: var(--gold);
+        }
+        .membership-tab-btn.active {
+            background: var(--gold);
+            color: #1a1a2e;
+            border-color: var(--gold);
+            font-weight: 700;
+        }
+        .membership-tab-content { display: none; }
+        .membership-tab-content.active { display: block; }
+
+        /* Event Coverage Matrix Table */
+        .event-matrix-wrapper {
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+            border-radius: 12px;
+            border: 1px solid rgba(255,255,255,0.15);
+        }
+        .event-matrix {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.82rem;
+            min-width: 700px;
+        }
+        .event-matrix thead th {
+            background: rgba(0,0,0,0.4);
+            color: var(--gold);
+            padding: 0.7rem 0.5rem;
+            text-align: center;
+            font-weight: 600;
+            position: sticky;
+            top: 0;
+            z-index: 2;
+            white-space: nowrap;
+            font-size: 0.75rem;
+        }
+        .event-matrix thead th:first-child {
+            text-align: left;
+            min-width: 180px;
+            position: sticky;
+            left: 0;
+            z-index: 3;
+            background: rgba(0,0,0,0.5);
+        }
+        .event-matrix tbody td {
+            padding: 0.55rem 0.5rem;
+            text-align: center;
+            border-bottom: 1px solid rgba(255,255,255,0.06);
+            color: rgba(255,255,255,0.9);
+        }
+        .event-matrix tbody td:first-child {
+            text-align: left;
+            font-weight: 500;
+            position: sticky;
+            left: 0;
+            background: rgba(30,0,0,0.85);
+            z-index: 1;
+        }
+        .event-matrix tbody tr:hover td {
+            background: rgba(255,255,255,0.06);
+        }
+        .event-matrix tbody tr:hover td:first-child {
+            background: rgba(60,0,0,0.9);
+        }
+        .event-matrix .ev-included {
+            color: #28a745;
+            font-weight: bold;
+        }
+        .event-matrix .ev-addon {
+            color: #ffc107;
+            font-size: 0.72rem;
+        }
+        .event-matrix .ev-na {
+            color: rgba(255,255,255,0.2);
+        }
+        .event-matrix .ev-month {
+            font-size: 0.68rem;
+            color: rgba(255,255,255,0.45);
+            display: block;
+        }
+        .event-matrix tfoot td {
+            background: rgba(0,0,0,0.3);
+            color: var(--gold);
+            font-weight: 700;
+            padding: 0.7rem 0.5rem;
+            text-align: center;
+            border-top: 2px solid var(--gold);
+        }
+        .event-matrix tfoot td:first-child {
+            text-align: left;
+            position: sticky;
+            left: 0;
+            background: rgba(0,0,0,0.5);
+        }
+
+        /* Value Analysis Cards */
+        .value-card {
+            background: rgba(255,255,255,0.08);
+            border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 16px;
+            padding: 1.5rem;
+            text-align: center;
+            transition: all 0.3s;
+        }
+        .value-card:hover {
+            transform: translateY(-5px);
+            border-color: var(--gold);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+        .value-card.best-value {
+            border: 2px solid #28a745;
+            background: rgba(40,167,69,0.1);
+        }
+        .value-multiplier {
+            font-family: 'Playfair Display', serif;
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: #28a745;
+            line-height: 1;
+        }
+        .value-card.best-value .value-multiplier { color: #28a745; }
+        .value-savings {
+            font-size: 1.1rem;
+            color: var(--gold);
+            font-weight: 600;
+        }
+        .event-cost-bar {
+            background: rgba(255,255,255,0.08);
+            border-radius: 8px;
+            overflow: hidden;
+            height: 28px;
+            position: relative;
+            margin-bottom: 0.5rem;
+        }
+        .event-cost-bar-fill {
+            height: 100%;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            padding-left: 8px;
+            font-size: 0.72rem;
+            font-weight: 600;
+            color: #fff;
+            white-space: nowrap;
+        }
+        .event-cost-bar-label {
+            position: absolute;
+            right: 8px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 0.72rem;
+            color: rgba(255,255,255,0.6);
+        }
+
+        @media (max-width: 768px) {
+            .membership-tab-btn { padding: 0.5rem 1rem; font-size: 0.8rem; }
+            .event-matrix { font-size: 0.75rem; }
+            .event-matrix thead th, .event-matrix tbody td { padding: 0.4rem 0.3rem; }
+            .value-multiplier { font-size: 2rem; }
+        }
+
         /* ========== JACKSONVILLE GUIDE ========== */
         .guide-section { background: #f0f4f8; }
         .guide-card {
@@ -2462,8 +2644,8 @@
     <section class="membership-section" id="membership">
         <div class="container">
             <div class="section-header">
-                <h2>Membership Plans</h2>
-                <p style="color: rgba(255,255,255,0.8);">Join our community • FY 2026-27 Season</p>
+                <h2>Membership & Benefits</h2>
+                <p style="color: rgba(255,255,255,0.8);">Join our community • FY 2026-27 Season • 18 Events • Incredible Value</p>
             </div>
             
             <!-- Early Bird Alert Banner -->
@@ -2471,13 +2653,13 @@
                 <div class="col-lg-10">
                     <div class="alert-box p-3 rounded-3 text-center" style="background: linear-gradient(135deg, #28a745, #20c997); color: #fff;">
                         <i class="fas fa-clock fa-lg me-2"></i>
-                        <strong>⏰ Early Bird Pricing!</strong> Family membership $375 (save $25) - Register by March 31, 2026
+                        <strong>⏰ Early Bird Pricing!</strong> Family Premium membership $375 (save $35) — Register by March 31, 2026
                     </div>
                 </div>
             </div>
             
             <!-- Member Portal Access Box -->
-            <div class="row justify-content-center mb-5">
+            <div class="row justify-content-center mb-4">
                 <div class="col-lg-10">
                     <div class="member-portal-box p-4 rounded-4" style="background: rgba(255,255,255,0.1); backdrop-filter: blur(10px); border: 2px solid var(--gold);">
                         <div class="row align-items-center">
@@ -2500,6 +2682,16 @@
                     </div>
                 </div>
             </div>
+
+            <!-- Tab Navigation -->
+            <div class="membership-tabs" id="membershipTabs">
+                <button class="membership-tab-btn active" onclick="switchMembershipTab('plans')"><i class="fas fa-id-card me-1"></i> Plans & Pricing</button>
+                <button class="membership-tab-btn" onclick="switchMembershipTab('events')"><i class="fas fa-calendar-check me-1"></i> Event Coverage</button>
+                <button class="membership-tab-btn" onclick="switchMembershipTab('value')"><i class="fas fa-chart-line me-1"></i> Value Analysis</button>
+            </div>
+
+            <!-- ====== TAB 1: PLANS & PRICING ====== -->
+            <div class="membership-tab-content active" id="tab-plans">
             
             <div class="row justify-content-center">
                 <!-- Student Plan -->
@@ -2525,11 +2717,11 @@
                     </div>
                 </div>
                 
-                <!-- Individual Plan -->
+                <!-- Individual / Regular Plan -->
                 <div class="col-lg-3 col-md-6 mb-4">
                     <div class="pricing-card">
                         <div class="pricing-header" style="background: linear-gradient(135deg, #6c757d 0%, #495057 100%);">
-                            <h4><i class="fas fa-user me-2"></i>Individual</h4>
+                            <h4><i class="fas fa-user me-2"></i>Regular</h4>
                             <p class="mb-2 opacity-75">Single Adult Member</p>
                             <div class="pricing-price">
                                 $210<span>/year</span>
@@ -2537,9 +2729,9 @@
                             <small class="opacity-75"><i class="fas fa-star me-1"></i>Full membership benefits</small>
                         </div>
                         <div class="pricing-body">
-                            <div class="pricing-feature"><i class="fas fa-check-circle"></i>Access to all events</div>
+                            <div class="pricing-feature"><i class="fas fa-check-circle"></i>All cultural events included</div>
                             <div class="pricing-feature"><i class="fas fa-check-circle"></i>Voting rights in elections</div>
-                            <div class="pricing-feature"><i class="fas fa-check-circle"></i>Newsletter subscription</div>
+                            <div class="pricing-feature"><i class="fas fa-check-circle"></i>Newsletter &amp; E-Magazine</div>
                             <div class="pricing-feature"><i class="fas fa-check-circle"></i>Member directory access</div>
                         </div>
                         <div class="pricing-footer">
@@ -2548,7 +2740,7 @@
                     </div>
                 </div>
                 
-                <!-- Couple Plan -->
+                <!-- Couple / Premium Plan -->
                 <div class="col-lg-3 col-md-6 mb-4">
                     <div class="pricing-card">
                         <div class="pricing-header" style="background: linear-gradient(135deg, #6f42c1 0%, #5a32a3 100%);">
@@ -2557,12 +2749,12 @@
                             <div class="pricing-price">
                                 $330<span>/year</span>
                             </div>
-                            <small class="opacity-75"><i class="fas fa-users me-1"></i>Dual membership</small>
+                            <small class="opacity-75"><i class="fas fa-users me-1"></i>Dual premium membership</small>
                         </div>
                         <div class="pricing-body">
-                            <div class="pricing-feature"><i class="fas fa-check-circle"></i>All Individual benefits</div>
-                            <div class="pricing-feature"><i class="fas fa-check-circle"></i>2 adult members</div>
-                            <div class="pricing-feature"><i class="fas fa-check-circle"></i>Priority registration</div>
+                            <div class="pricing-feature"><i class="fas fa-check-circle"></i>All Regular benefits × 2</div>
+                            <div class="pricing-feature"><i class="fas fa-check-circle"></i>Priority event registration</div>
+                            <div class="pricing-feature"><i class="fas fa-check-circle"></i>Puja dinner included</div>
                             <div class="pricing-feature"><i class="fas fa-check-circle"></i>Event discounts</div>
                         </div>
                         <div class="pricing-footer">
@@ -2575,19 +2767,19 @@
                 <div class="col-lg-3 col-md-6 mb-4">
                     <div class="pricing-card featured">
                         <div class="pricing-header">
-                            <span class="badge bg-warning text-dark mb-2"><i class="fas fa-star me-1"></i>Most Popular</span>
-                            <h4 style="color: #fff;"><i class="fas fa-users me-2"></i>Family</h4>
+                            <span class="badge bg-warning text-dark mb-2"><i class="fas fa-trophy me-1"></i>Best Value</span>
+                            <h4 style="color: #fff;"><i class="fas fa-users me-2"></i>Family Premium</h4>
                             <p class="mb-2 opacity-75">2 Adults + Kids</p>
                             <div class="pricing-price">
-                                $400<span>/year</span>
+                                $410<span>/year</span>
                             </div>
                             <small class="text-success"><i class="fas fa-tag me-1"></i>Early Bird: $375 (by Mar 31)</small>
                         </div>
                         <div class="pricing-body">
-                            <div class="pricing-feature"><i class="fas fa-check-circle"></i>All Couple benefits</div>
+                            <div class="pricing-feature"><i class="fas fa-check-circle"></i>All 18 events included</div>
                             <div class="pricing-feature"><i class="fas fa-check-circle"></i>2 adults + children</div>
-                            <div class="pricing-feature"><i class="fas fa-check-circle"></i>Priority event registration</div>
-                            <div class="pricing-feature"><i class="fas fa-check-circle"></i>Family discounts on events</div>
+                            <div class="pricing-feature"><i class="fas fa-check-circle"></i>Puja dinner for family</div>
+                            <div class="pricing-feature"><i class="fas fa-check-circle"></i>Up to 2.84× value return</div>
                         </div>
                         <div class="pricing-footer">
                             <a href="mailto:membership@jaxbengali.org" class="btn w-100" style="background: var(--gradient-primary); color: white; border: none;">Select Plan</a>
@@ -2596,23 +2788,32 @@
                 </div>
             </div>
             
-            <!-- Special Membership Options -->
+            <!-- Special / Selective Membership Options -->
             <div class="row justify-content-center mt-4">
                 <div class="col-lg-10">
                     <div class="p-4 rounded-3 text-center" style="background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15);">
-                        <h5 style="color: var(--gold);"><i class="fas fa-theater-masks me-2"></i>NEW! Selective Membership Plans</h5>
+                        <h5 style="color: var(--gold);"><i class="fas fa-theater-masks me-2"></i>Selective Membership Plans</h5>
                         <p class="text-white opacity-85 mb-3">Can't attend all events? Choose the plan that fits your interests!</p>
                         <div class="row g-3 justify-content-center">
-                            <div class="col-md-5">
+                            <div class="col-md-4">
                                 <div class="p-3 rounded-3" style="background: rgba(255,255,255,0.1);">
-                                    <h6 style="color: #FF69B4;"><i class="fas fa-music me-2"></i>Culture Special - $180</h6>
-                                    <p class="small text-white-50 mb-0">Access to: Spandan, Nabo Borsho, Summer Camp</p>
+                                    <h6 style="color: #FF69B4;"><i class="fas fa-music me-2"></i>Culture Special — $180</h6>
+                                    <p class="small text-white-50 mb-1">Spandan, Noboborsho, Summer Camp, Kids Sports, Winter Picnic</p>
+                                    <span class="badge" style="background: rgba(255,105,180,0.3); color: #FF69B4;">4.06× value</span>
                                 </div>
                             </div>
-                            <div class="col-md-5">
+                            <div class="col-md-4">
                                 <div class="p-3 rounded-3" style="background: rgba(255,255,255,0.1);">
-                                    <h6 style="color: #ffc107;"><i class="fas fa-om me-2"></i>Religious Special - $180</h6>
-                                    <p class="small text-white-50 mb-0">Access to: Durga Puja, Kali Puja, Saraswati Puja</p>
+                                    <h6 style="color: #ffc107;"><i class="fas fa-om me-2"></i>Religious Special — $180</h6>
+                                    <p class="small text-white-50 mb-1">Durga Puja, Mohaloya, Lakshmi Puja, Kali Puja, Saraswati Puja</p>
+                                    <span class="badge" style="background: rgba(255,193,7,0.3); color: #ffc107;">3.08× value</span>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="p-3 rounded-3" style="background: rgba(255,255,255,0.1);">
+                                    <h6 style="color: #20c997;"><i class="fas fa-puzzle-piece me-2"></i>Add-On Events</h6>
+                                    <p class="small text-white-50 mb-1">Non-members can attend individual events at guest pricing</p>
+                                    <span class="badge" style="background: rgba(32,201,151,0.3); color: #20c997;">Pay per event</span>
                                 </div>
                             </div>
                         </div>
@@ -2621,43 +2822,473 @@
             </div>
             
             <!-- Member Benefits Summary -->
-            <div class="row mt-5">
+            <div class="row mt-4">
                 <div class="col-12">
                     <div class="p-4 rounded-3" style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2);">
                         <h5 class="text-center mb-4" style="color: #fff;"><i class="fas fa-gift me-2"></i>Exclusive Member Benefits</h5>
                         <div class="row g-3 text-center">
-                            <div class="col-6 col-md-3">
-                                <div class="p-3" style="color: rgba(255,255,255,0.9);">
+                            <div class="col-6 col-md-2">
+                                <div class="p-2" style="color: rgba(255,255,255,0.9);">
+                                    <i class="fas fa-calendar-alt fa-2x mb-2" style="color: var(--gold);"></i>
+                                    <h6 class="mb-0" style="font-size:0.85rem;">18 Events</h6>
+                                    <small class="opacity-75">Full year access</small>
+                                </div>
+                            </div>
+                            <div class="col-6 col-md-2">
+                                <div class="p-2" style="color: rgba(255,255,255,0.9);">
+                                    <i class="fas fa-utensils fa-2x mb-2" style="color: var(--gold);"></i>
+                                    <h6 class="mb-0" style="font-size:0.85rem;">Puja Dinner</h6>
+                                    <small class="opacity-75">Premium plans</small>
+                                </div>
+                            </div>
+                            <div class="col-6 col-md-2">
+                                <div class="p-2" style="color: rgba(255,255,255,0.9);">
                                     <i class="fas fa-file-alt fa-2x mb-2" style="color: var(--gold);"></i>
-                                    <h6 class="mb-0">Meeting Minutes</h6>
-                                    <small class="opacity-75">Access EC meeting summaries</small>
+                                    <h6 class="mb-0" style="font-size:0.85rem;">Meeting Minutes</h6>
+                                    <small class="opacity-75">EC summaries</small>
                                 </div>
                             </div>
-                            <div class="col-6 col-md-3">
-                                <div class="p-3" style="color: rgba(255,255,255,0.9);">
-                                    <i class="fas fa-ticket-alt fa-2x mb-2" style="color: var(--gold);"></i>
-                                    <h6 class="mb-0">Event Discounts</h6>
-                                    <small class="opacity-75">Special member pricing</small>
-                                </div>
-                            </div>
-                            <div class="col-6 col-md-3">
-                                <div class="p-3" style="color: rgba(255,255,255,0.9);">
+                            <div class="col-6 col-md-2">
+                                <div class="p-2" style="color: rgba(255,255,255,0.9);">
                                     <i class="fas fa-pen-fancy fa-2x mb-2" style="color: var(--gold);"></i>
-                                    <h6 class="mb-0">Submit Articles</h6>
-                                    <small class="opacity-75">Contribute to E-Magazine</small>
+                                    <h6 class="mb-0" style="font-size:0.85rem;">E-Magazine</h6>
+                                    <small class="opacity-75">Submit articles</small>
                                 </div>
                             </div>
-                            <div class="col-6 col-md-3">
-                                <div class="p-3" style="color: rgba(255,255,255,0.9);">
+                            <div class="col-6 col-md-2">
+                                <div class="p-2" style="color: rgba(255,255,255,0.9);">
+                                    <i class="fas fa-vote-yea fa-2x mb-2" style="color: var(--gold);"></i>
+                                    <h6 class="mb-0" style="font-size:0.85rem;">Voting Rights</h6>
+                                    <small class="opacity-75">EC elections</small>
+                                </div>
+                            </div>
+                            <div class="col-6 col-md-2">
+                                <div class="p-2" style="color: rgba(255,255,255,0.9);">
                                     <i class="fas fa-star fa-2x mb-2" style="color: var(--gold);"></i>
-                                    <h6 class="mb-0">Write Reviews</h6>
-                                    <small class="opacity-75">Rate Jacksonville Guide listings</small>
+                                    <h6 class="mb-0" style="font-size:0.85rem;">Jax Guide</h6>
+                                    <small class="opacity-75">Write reviews</small>
                                 </div>
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
+            </div><!-- end tab-plans -->
+
+            <!-- ====== TAB 2: EVENT COVERAGE MATRIX ====== -->
+            <div class="membership-tab-content" id="tab-events">
+                <div class="row justify-content-center mb-3">
+                    <div class="col-lg-10 text-center">
+                        <p style="color: rgba(255,255,255,0.75);">
+                            <i class="fas fa-info-circle me-1"></i> See exactly which events are included in each membership tier. 
+                            <span class="text-success">✅ = Included</span> &nbsp; 
+                            <span style="color: #ffc107;">$ = Add-on at member rate</span> &nbsp;
+                            <span style="color: rgba(255,255,255,0.3);">— = Not included</span>
+                        </p>
+                    </div>
+                </div>
+                <div class="row justify-content-center">
+                    <div class="col-lg-12">
+                        <div class="event-matrix-wrapper">
+                            <table class="event-matrix">
+                                <thead>
+                                    <tr>
+                                        <th>Event</th>
+                                        <th>🏆 Family Premium<br><small>$410 (EB $375)</small></th>
+                                        <th>Couple<br><small>$330</small></th>
+                                        <th>Regular<br><small>$210</small></th>
+                                        <th>Student<br><small>$165</small></th>
+                                        <th>🎭 Culture<br><small>$180</small></th>
+                                        <th>🕉️ Religious<br><small>$180</small></th>
+                                        <th>Guest<br><small>per event</small></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <!-- Spring -->
+                                    <tr>
+                                        <td>🌸 Bosonto Utsob <span class="ev-month">Mar 7</span></td>
+                                        <td class="ev-included">✅</td>
+                                        <td class="ev-included">✅</td>
+                                        <td class="ev-included">✅</td>
+                                        <td class="ev-included">✅</td>
+                                        <td class="ev-included">✅</td>
+                                        <td class="ev-na">—</td>
+                                        <td class="ev-addon">$25</td>
+                                    </tr>
+                                    <tr>
+                                        <td>🎊 Noboborsho <span class="ev-month">Apr 14</span></td>
+                                        <td class="ev-included">✅</td>
+                                        <td class="ev-included">✅</td>
+                                        <td class="ev-included">✅</td>
+                                        <td class="ev-included">✅</td>
+                                        <td class="ev-included">✅</td>
+                                        <td class="ev-na">—</td>
+                                        <td class="ev-addon">$30</td>
+                                    </tr>
+                                    <!-- Summer -->
+                                    <tr>
+                                        <td>⚽ Kids Summer Sports <span class="ev-month">Jun–Jul</span></td>
+                                        <td class="ev-included">✅</td>
+                                        <td class="ev-included">✅</td>
+                                        <td class="ev-included">✅</td>
+                                        <td class="ev-included">✅</td>
+                                        <td class="ev-included">✅</td>
+                                        <td class="ev-na">—</td>
+                                        <td class="ev-addon">$30</td>
+                                    </tr>
+                                    <tr>
+                                        <td>🎨 Summer Workshops <span class="ev-month">Jun–Jul</span></td>
+                                        <td class="ev-included">✅</td>
+                                        <td class="ev-included">✅</td>
+                                        <td class="ev-included">✅</td>
+                                        <td class="ev-included">✅</td>
+                                        <td class="ev-included">✅</td>
+                                        <td class="ev-na">—</td>
+                                        <td class="ev-addon">$25</td>
+                                    </tr>
+                                    <tr>
+                                        <td>🏅 Sports Day <span class="ev-month">Jul</span></td>
+                                        <td class="ev-included">✅</td>
+                                        <td class="ev-included">✅</td>
+                                        <td class="ev-included">✅</td>
+                                        <td class="ev-included">✅</td>
+                                        <td class="ev-included">✅</td>
+                                        <td class="ev-na">—</td>
+                                        <td class="ev-addon">$20</td>
+                                    </tr>
+                                    <!-- Cultural -->
+                                    <tr>
+                                        <td>🎶 Spandan <span class="ev-month">Aug</span></td>
+                                        <td class="ev-included">✅</td>
+                                        <td class="ev-included">✅</td>
+                                        <td class="ev-included">✅</td>
+                                        <td class="ev-included">✅</td>
+                                        <td class="ev-included">✅</td>
+                                        <td class="ev-na">—</td>
+                                        <td class="ev-addon">$40</td>
+                                    </tr>
+                                    <!-- Puja Season -->
+                                    <tr>
+                                        <td>🪔 Mohaloya <span class="ev-month">Oct 17</span></td>
+                                        <td class="ev-included">✅</td>
+                                        <td class="ev-included">✅</td>
+                                        <td class="ev-included">✅</td>
+                                        <td class="ev-included">✅</td>
+                                        <td class="ev-na">—</td>
+                                        <td class="ev-included">✅</td>
+                                        <td class="ev-addon">$15</td>
+                                    </tr>
+                                    <tr style="background: rgba(255,215,0,0.05);">
+                                        <td><strong>🕉️ Durga Puja + Dinner</strong> <span class="ev-month">Oct 24–25</span></td>
+                                        <td class="ev-included">✅</td>
+                                        <td class="ev-included">✅</td>
+                                        <td class="ev-addon">$50 add</td>
+                                        <td class="ev-addon">$50 add</td>
+                                        <td class="ev-na">—</td>
+                                        <td class="ev-included">✅</td>
+                                        <td class="ev-addon">$100</td>
+                                    </tr>
+                                    <tr>
+                                        <td>🕉️ Durga Puja (no dinner) <span class="ev-month">Oct 24–25</span></td>
+                                        <td class="ev-included">✅</td>
+                                        <td class="ev-included">✅</td>
+                                        <td class="ev-included">✅</td>
+                                        <td class="ev-included">✅</td>
+                                        <td class="ev-na">—</td>
+                                        <td class="ev-included">✅</td>
+                                        <td class="ev-addon">$50</td>
+                                    </tr>
+                                    <tr>
+                                        <td>🪔 Lakshmi Puja <span class="ev-month">Oct 24</span></td>
+                                        <td class="ev-included">✅</td>
+                                        <td class="ev-included">✅</td>
+                                        <td class="ev-included">✅</td>
+                                        <td class="ev-included">✅</td>
+                                        <td class="ev-na">—</td>
+                                        <td class="ev-included">✅</td>
+                                        <td class="ev-addon">$15</td>
+                                    </tr>
+                                    <tr>
+                                        <td>🎉 Bijoya Sonmiloni <span class="ev-month">Oct 25</span></td>
+                                        <td class="ev-included">✅</td>
+                                        <td class="ev-included">✅</td>
+                                        <td class="ev-included">✅</td>
+                                        <td class="ev-included">✅</td>
+                                        <td class="ev-na">—</td>
+                                        <td class="ev-included">✅</td>
+                                        <td class="ev-addon">$20</td>
+                                    </tr>
+                                    <tr>
+                                        <td>🎭 Artist Program Day 1 <span class="ev-month">Oct 24</span></td>
+                                        <td class="ev-included">✅</td>
+                                        <td class="ev-included">✅</td>
+                                        <td class="ev-included">✅</td>
+                                        <td class="ev-included">✅</td>
+                                        <td class="ev-na">—</td>
+                                        <td class="ev-included">✅</td>
+                                        <td class="ev-addon">$30</td>
+                                    </tr>
+                                    <tr>
+                                        <td>🎭 Artist Program Day 2 <span class="ev-month">Oct 25</span></td>
+                                        <td class="ev-included">✅</td>
+                                        <td class="ev-included">✅</td>
+                                        <td class="ev-included">✅</td>
+                                        <td class="ev-included">✅</td>
+                                        <td class="ev-na">—</td>
+                                        <td class="ev-included">✅</td>
+                                        <td class="ev-addon">$30</td>
+                                    </tr>
+                                    <!-- Late Fall / Winter -->
+                                    <tr>
+                                        <td>🕯️ Kali Puja <span class="ev-month">Nov 14</span></td>
+                                        <td class="ev-included">✅</td>
+                                        <td class="ev-included">✅</td>
+                                        <td class="ev-included">✅</td>
+                                        <td class="ev-included">✅</td>
+                                        <td class="ev-na">—</td>
+                                        <td class="ev-included">✅</td>
+                                        <td class="ev-addon">$25</td>
+                                    </tr>
+                                    <tr>
+                                        <td>🎭 Natok <span class="ev-month">Nov 14</span></td>
+                                        <td class="ev-included">✅</td>
+                                        <td class="ev-included">✅</td>
+                                        <td class="ev-included">✅</td>
+                                        <td class="ev-included">✅</td>
+                                        <td class="ev-included">✅</td>
+                                        <td class="ev-na">—</td>
+                                        <td class="ev-addon">$25</td>
+                                    </tr>
+                                    <tr>
+                                        <td>🏕️ Winter Picnic <span class="ev-month">Jan 11</span></td>
+                                        <td class="ev-included">✅</td>
+                                        <td class="ev-included">✅</td>
+                                        <td class="ev-included">✅</td>
+                                        <td class="ev-included">✅</td>
+                                        <td class="ev-included">✅</td>
+                                        <td class="ev-na">—</td>
+                                        <td class="ev-addon">$35</td>
+                                    </tr>
+                                    <tr>
+                                        <td>📚 Saraswati Puja <span class="ev-month">Feb 27</span></td>
+                                        <td class="ev-included">✅</td>
+                                        <td class="ev-included">✅</td>
+                                        <td class="ev-included">✅</td>
+                                        <td class="ev-included">✅</td>
+                                        <td class="ev-na">—</td>
+                                        <td class="ev-included">✅</td>
+                                        <td class="ev-addon">$25</td>
+                                    </tr>
+                                </tbody>
+                                <tfoot>
+                                    <tr>
+                                        <td><strong>Events Included</strong></td>
+                                        <td><strong>18</strong></td>
+                                        <td><strong>18</strong></td>
+                                        <td><strong>17*</strong></td>
+                                        <td><strong>17*</strong></td>
+                                        <td><strong>9</strong></td>
+                                        <td><strong>9</strong></td>
+                                        <td>—</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Total Guest Value</strong></td>
+                                        <td><strong style="color:#28a745;">$1,165</strong></td>
+                                        <td><strong style="color:#28a745;">$1,165</strong></td>
+                                        <td><strong>$1,115</strong></td>
+                                        <td><strong>$1,115</strong></td>
+                                        <td><strong>$730</strong></td>
+                                        <td><strong>$555</strong></td>
+                                        <td>varies</td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+                        <p class="text-center mt-2" style="color: rgba(255,255,255,0.5); font-size: 0.78rem;">
+                            * Regular/Student: Durga Puja dinner requires $50 add-on. Guest prices shown for family of 4.
+                        </p>
+                    </div>
+                </div>
+            </div><!-- end tab-events -->
+
+            <!-- ====== TAB 3: VALUE ANALYSIS ====== -->
+            <div class="membership-tab-content" id="tab-value">
+                
+                <!-- Value Multiplier Cards -->
+                <div class="row justify-content-center mb-4">
+                    <div class="col-lg-10 text-center mb-3">
+                        <h5 style="color: var(--gold);"><i class="fas fa-chart-bar me-2"></i>What Your Membership Is Really Worth</h5>
+                        <p style="color: rgba(255,255,255,0.7);">If you attended every included event as a non-member (guest pricing), here's what you'd pay vs. your membership fee:</p>
+                    </div>
+                </div>
+                <div class="row g-3 justify-content-center mb-5">
+                    <!-- Family Premium EB -->
+                    <div class="col-lg-3 col-md-6">
+                        <div class="value-card best-value">
+                            <span class="badge bg-success mb-2"><i class="fas fa-trophy me-1"></i>BEST VALUE</span>
+                            <h6 style="color: var(--gold);">Family Premium (EB)</h6>
+                            <div class="value-multiplier">2.84×</div>
+                            <p class="text-white-50 small mb-2">value return</p>
+                            <div class="value-savings">Save $790</div>
+                            <p class="text-white-50 small mb-0">$375 fee → $1,165 event value</p>
+                        </div>
+                    </div>
+                    <!-- Family Premium Regular -->
+                    <div class="col-lg-3 col-md-6">
+                        <div class="value-card">
+                            <h6 style="color: var(--gold);">Family Premium</h6>
+                            <div class="value-multiplier">2.60×</div>
+                            <p class="text-white-50 small mb-2">value return</p>
+                            <div class="value-savings">Save $755</div>
+                            <p class="text-white-50 small mb-0">$410 fee → $1,165 event value</p>
+                        </div>
+                    </div>
+                    <!-- Culture Special -->
+                    <div class="col-lg-3 col-md-6">
+                        <div class="value-card">
+                            <span class="badge mb-2" style="background: rgba(255,105,180,0.3); color: #FF69B4;">Cultural</span>
+                            <h6 style="color: #FF69B4;">Culture Special</h6>
+                            <div class="value-multiplier" style="color: #FF69B4;">4.06×</div>
+                            <p class="text-white-50 small mb-2">value return</p>
+                            <div class="value-savings" style="color: #FF69B4;">Save $550</div>
+                            <p class="text-white-50 small mb-0">$180 fee → $730 event value</p>
+                        </div>
+                    </div>
+                    <!-- Religious Special -->
+                    <div class="col-lg-3 col-md-6">
+                        <div class="value-card">
+                            <span class="badge mb-2" style="background: rgba(255,193,7,0.3); color: #ffc107;">Religious</span>
+                            <h6 style="color: #ffc107;">Religious Special</h6>
+                            <div class="value-multiplier" style="color: #ffc107;">3.08×</div>
+                            <p class="text-white-50 small mb-2">value return</p>
+                            <div class="value-savings" style="color: #ffc107;">Save $375</div>
+                            <p class="text-white-50 small mb-0">$180 fee → $555 event value</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Where Your Fees Go -->
+                <div class="row justify-content-center">
+                    <div class="col-lg-10">
+                        <div class="p-4 rounded-3" style="background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12);">
+                            <h5 class="text-center mb-4" style="color: #fff;"><i class="fas fa-piggy-bank me-2" style="color: var(--gold);"></i>Where Your Membership Fees Go</h5>
+                            <p class="text-center mb-4" style="color: rgba(255,255,255,0.6); font-size: 0.85rem;">BANF is a 501(c)(3) non-profit. Every dollar funds community events and cultural programs.</p>
+                            
+                            <!-- Event Cost Breakdown -->
+                            <div class="event-cost-bar">
+                                <div class="event-cost-bar-fill" style="width: 38%; background: linear-gradient(135deg, #8B0000, #dc3545);">Durga Puja</div>
+                                <span class="event-cost-bar-label">$20,000</span>
+                            </div>
+                            <div class="event-cost-bar">
+                                <div class="event-cost-bar-fill" style="width: 12%; background: linear-gradient(135deg, #6f42c1, #9b59b6);">Spandan</div>
+                                <span class="event-cost-bar-label">$6,000</span>
+                            </div>
+                            <div class="event-cost-bar">
+                                <div class="event-cost-bar-fill" style="width: 9%; background: linear-gradient(135deg, #fd7e14, #e67e22);">Kali Puja</div>
+                                <span class="event-cost-bar-label">$4,500</span>
+                            </div>
+                            <div class="event-cost-bar">
+                                <div class="event-cost-bar-fill" style="width: 9%; background: linear-gradient(135deg, #ffc107, #f39c12);">Saraswati Puja</div>
+                                <span class="event-cost-bar-label">$4,500</span>
+                            </div>
+                            <div class="event-cost-bar">
+                                <div class="event-cost-bar-fill" style="width: 6%; background: linear-gradient(135deg, #17a2b8, #20c997);">Winter Picnic</div>
+                                <span class="event-cost-bar-label">$3,000</span>
+                            </div>
+                            <div class="event-cost-bar">
+                                <div class="event-cost-bar-fill" style="width: 5%; background: linear-gradient(135deg, #28a745, #27ae60);">Noboborsho</div>
+                                <span class="event-cost-bar-label">$2,500</span>
+                            </div>
+                            <div class="event-cost-bar">
+                                <div class="event-cost-bar-fill" style="width: 21%; background: linear-gradient(135deg, #6c757d, #495057);">Other Events &amp; Operations</div>
+                                <span class="event-cost-bar-label">$11,100</span>
+                            </div>
+                            
+                            <div class="text-center mt-3">
+                                <p style="color: var(--gold); font-weight: 600; font-size: 1.1rem; margin-bottom: 0.25rem;">
+                                    Total Annual Event Budget: $51,600
+                                </p>
+                                <small style="color: rgba(255,255,255,0.5);">Funded by membership fees, sponsorships, and community donations</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Comparison Table -->
+                <div class="row justify-content-center mt-4">
+                    <div class="col-lg-10">
+                        <div class="p-4 rounded-3" style="background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12);">
+                            <h5 class="text-center mb-3" style="color: #fff;"><i class="fas fa-balance-scale me-2"></i>Quick Comparison</h5>
+                            <div class="event-matrix-wrapper">
+                                <table class="event-matrix" style="min-width: 500px;">
+                                    <thead>
+                                        <tr>
+                                            <th>Feature</th>
+                                            <th>Family Premium</th>
+                                            <th>Couple</th>
+                                            <th>Regular</th>
+                                            <th>Student</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <td>Annual Fee</td>
+                                            <td style="color:#28a745; font-weight:700;">$410 (EB $375)</td>
+                                            <td>$330</td>
+                                            <td>$210</td>
+                                            <td>$165</td>
+                                        </tr>
+                                        <tr>
+                                            <td>Members Covered</td>
+                                            <td>2 Adults + Kids</td>
+                                            <td>2 Adults</td>
+                                            <td>1 Adult</td>
+                                            <td>1 Student</td>
+                                        </tr>
+                                        <tr>
+                                            <td>Events Included</td>
+                                            <td class="ev-included">All 18</td>
+                                            <td class="ev-included">All 18</td>
+                                            <td>17 (dinner add-on)</td>
+                                            <td>17 (dinner add-on)</td>
+                                        </tr>
+                                        <tr>
+                                            <td>Puja Dinner Included</td>
+                                            <td class="ev-included">✅ Family</td>
+                                            <td class="ev-included">✅ Couple</td>
+                                            <td class="ev-addon">$50 add-on</td>
+                                            <td class="ev-addon">$50 add-on</td>
+                                        </tr>
+                                        <tr>
+                                            <td>Voting Rights</td>
+                                            <td class="ev-included">✅</td>
+                                            <td class="ev-included">✅</td>
+                                            <td class="ev-included">✅</td>
+                                            <td class="ev-na">—</td>
+                                        </tr>
+                                        <tr>
+                                            <td>E-Magazine Access</td>
+                                            <td class="ev-included">✅</td>
+                                            <td class="ev-included">✅</td>
+                                            <td class="ev-included">✅</td>
+                                            <td class="ev-included">✅</td>
+                                        </tr>
+                                        <tr>
+                                            <td>Value Multiplier</td>
+                                            <td style="color:#28a745; font-weight:700;">2.84× (EB)</td>
+                                            <td>3.53×</td>
+                                            <td>5.31×</td>
+                                            <td>6.76×</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div><!-- end tab-value -->
+
         </div>
     </section>
 
@@ -8118,6 +8749,19 @@
             const modal = new bootstrap.Modal(document.getElementById('memberPortalModal'));
             showPortalTab(tab);
             modal.show();
+        }
+
+        /**
+         * Switch Membership Section Tabs (Plans / Event Coverage / Value Analysis)
+         */
+        function switchMembershipTab(tabName) {
+            // Update tab buttons
+            document.querySelectorAll('.membership-tab-btn').forEach(btn => btn.classList.remove('active'));
+            event.target.closest('.membership-tab-btn').classList.add('active');
+            // Update tab content
+            document.querySelectorAll('.membership-tab-content').forEach(el => el.classList.remove('active'));
+            const targetTab = document.getElementById('tab-' + tabName);
+            if (targetTab) targetTab.classList.add('active');
         }
 
         /**
