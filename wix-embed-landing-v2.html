@@ -1497,15 +1497,15 @@
                     </a>
                 </div>
                 <div class="col">
-                    <a href="#surveys" class="quick-item" data-action="surveys" title="surveys.jsw → getActiveSurveys()" onclick="openSurveyModal(); return false;">
+                    <a href="#surveys" class="quick-item" data-action="surveys" title="Members only — Login required" onclick="openSurveyModal(); return false;">
                         <i class="fas fa-poll"></i>
-                        <span>Surveys</span>
+                        <span>Surveys <i class="fas fa-lock ms-1 small"></i></span>
                     </a>
                 </div>
                 <div class="col">
-                    <a href="#complaints" class="quick-item" data-action="complaints" title="complaints.jsw → submitComplaint()" onclick="openComplaintForm(); return false;">
+                    <a href="#complaints" class="quick-item" data-action="complaints" title="Members only — Login required" onclick="openComplaintForm(); return false;">
                         <i class="fas fa-shield-alt"></i>
-                        <span>Complaints</span>
+                        <span>Complaints <i class="fas fa-lock ms-1 small"></i></span>
                     </a>
                 </div>
                 <div class="col">
@@ -1776,19 +1776,19 @@
                 <div class="service-card">
                     <div class="service-icon" style="background: linear-gradient(135deg, #FF9800, #FFC107);"><i class="fas fa-poll"></i></div>
                     <h5>Community Surveys</h5>
-                    <p>Participate in community polls and surveys. Share your voice anonymously or as a member.</p>
+                    <p>Participate in community polls and surveys. Members only — login to share your voice.</p>
                     <a href="#surveys" class="service-link" data-action="surveys" onclick="openSurveyModal(); return false;">
-                        Take Survey <i class="fas fa-arrow-right"></i>
+                        Take Survey <i class="fas fa-lock ms-1"></i>
                     </a>
                 </div>
                 
-                <!-- Anonymous Complaints -->
+                <!-- Complaints -->
                 <div class="service-card">
                     <div class="service-icon" style="background: linear-gradient(135deg, #607D8B, #455A64);"><i class="fas fa-shield-alt"></i></div>
-                    <h5>Anonymous Complaints</h5>
-                    <p>Submit anonymous complaints securely. Track status with access codes and add follow-ups.</p>
+                    <h5>Complaints</h5>
+                    <p>Submit complaints securely as a member. Track status with access codes and add follow-ups.</p>
                     <a href="#complaints" class="service-link" data-action="complaints" onclick="openComplaintForm(); return false;">
-                        Submit Complaint <i class="fas fa-arrow-right"></i>
+                        Submit Complaint <i class="fas fa-lock ms-1"></i>
                     </a>
                 </div>
                 
@@ -2295,7 +2295,7 @@
                     <div class="mt-4 p-3 rounded-3" style="background: linear-gradient(135deg, rgba(255,107,53,0.1), rgba(247,147,30,0.1)); border: 1px dashed var(--banf-orange);">
                         <h5 class="mb-2"><i class="fas fa-pencil-alt me-2"></i>Contribute Your Work</h5>
                         <p class="mb-2 small text-muted">Members can submit articles, poems, and stories for publication.</p>
-                        <a href="#" class="btn btn-sm" style="background: var(--gradient-primary); color: #fff;"><i class="fas fa-paper-plane me-1"></i>Submit Article</a>
+                        <a href="#" onclick="openMagazineSubmit(); return false;" class="btn btn-sm" style="background: var(--gradient-primary); color: #fff;"><i class="fas fa-paper-plane me-1"></i>Submit Article <i class="fas fa-lock ms-1 small"></i></a>
                     </div>
                 </div>
             </div>
@@ -2472,8 +2472,8 @@
                             <i class="fas fa-newspaper fa-2x mb-2"></i>
                             <h5>E-Magazine</h5>
                             <p class="small opacity-85">Submit articles, poems & stories for our annual publication!</p>
-                            <a href="#" onclick="if(window.parent){window.parent.postMessage({type:'NAVIGATE',target:'/magazine'},'*');}" class="btn btn-sm btn-warning">
-                                <i class="fas fa-pen me-1"></i>Submit Article
+                            <a href="#" onclick="openMagazineSubmit(); return false;" class="btn btn-sm btn-warning">
+                                <i class="fas fa-pen me-1"></i>Submit Article <i class="fas fa-lock ms-1 small"></i>
                             </a>
                         </div>
                     </div>
@@ -7957,7 +7957,8 @@
             isLoggedIn: false,
             member: null,
             registrationId: null,
-            apiBase: BANF_API.siteUrl
+            apiBase: BANF_API.siteUrl,
+            pendingServiceAction: null  // Stores intended service after login (survey/complaint/magazineSubmit)
         };
 
         // Admin Portal State
@@ -8575,6 +8576,12 @@
             document.body.style.overflow = 'hidden';
             
             console.log('✅ Full portal opened');
+
+            // If user came from a service link, redirect them after login
+            if (MemberPortal.pendingServiceAction) {
+                handlePendingServiceAction();
+                return; // skip showing portal — go straight to the service
+            }
         }
         
         /**
@@ -10485,6 +10492,20 @@
             // Use the same Bootstrap modal as openMemberPortal
             openMemberPortal('login');
         }
+
+        /**
+         * Show a toast notification (global helper)
+         */
+        function showToast(message, type) {
+            const colors = { success: '#10B981', error: '#EF4444', info: '#3B82F6', warning: '#F59E0B' };
+            const icons  = { success: 'check-circle', error: 'exclamation-circle', info: 'info-circle', warning: 'exclamation-triangle' };
+            const toast = document.createElement('div');
+            toast.style.cssText = 'position:fixed;top:20px;right:20px;z-index:100000;padding:12px 24px;border-radius:8px;color:#fff;font-weight:500;display:flex;align-items:center;gap:8px;box-shadow:0 4px 12px rgba(0,0,0,0.3);animation:slideInRight 0.3s ease;max-width:360px;';
+            toast.style.background = colors[type] || colors.info;
+            toast.innerHTML = '<i class="fas fa-' + (icons[type] || icons.info) + '"></i> ' + message;
+            document.body.appendChild(toast);
+            setTimeout(function(){ toast.style.opacity = '0'; toast.style.transition = 'opacity 0.3s'; setTimeout(function(){ toast.remove(); }, 300); }, 3500);
+        }
         
         /**
          * Open Admin Login Modal
@@ -10595,20 +10616,91 @@
         }
         
         /**
-         * Open Anonymous Complaint Form
+         * Open Anonymous Complaint Form — requires member login
          */
         function openComplaintForm() {
+            if (!MemberPortal.isLoggedIn) {
+                MemberPortal.pendingServiceAction = 'complaint';
+                openMemberLoginModal();
+                return;
+            }
             const modal = new bootstrap.Modal(document.getElementById('complaintModal'));
             modal.show();
         }
 
         /**
-         * Open surveys modal and load active surveys
+         * Open surveys modal and load active surveys — requires member login
          */
         async function openSurveyModal() {
+            if (!MemberPortal.isLoggedIn) {
+                MemberPortal.pendingServiceAction = 'survey';
+                openMemberLoginModal();
+                return;
+            }
             const modal = new bootstrap.Modal(document.getElementById('surveyModal'));
             modal.show();
             await loadSurveys();
+        }
+
+        /**
+         * Open magazine article submission — requires member login
+         * (Reading the magazine is always public)
+         */
+        function openMagazineSubmit() {
+            if (!MemberPortal.isLoggedIn) {
+                MemberPortal.pendingServiceAction = 'magazineSubmit';
+                openMemberLoginModal();
+                return;
+            }
+            // Scroll to the magazine section where they can submit
+            scrollToSection('magazine');
+            // Show a success toast so they know they're ready
+            setTimeout(() => {
+                showToast('✅ You\'re logged in! You can submit your article, poem, or story.', 'success');
+            }, 600);
+        }
+
+        /**
+         * Handle pending service action after successful login
+         * Called from showFullPortal() after member logs in
+         */
+        function handlePendingServiceAction() {
+            const action = MemberPortal.pendingServiceAction;
+            if (!action) return;
+            MemberPortal.pendingServiceAction = null; // clear it
+
+            // Close the member portal overlay first
+            const overlay = document.getElementById('memberPortalOverlay');
+            if (overlay) {
+                overlay.style.display = 'none';
+                document.body.style.overflow = '';
+            }
+            // Also close the login modal if open
+            const modal = document.getElementById('memberPortalModal');
+            if (modal) {
+                const bsModal = bootstrap.Modal.getInstance(modal);
+                if (bsModal) bsModal.hide();
+            }
+
+            setTimeout(() => {
+                switch(action) {
+                    case 'survey':
+                        const surveyModal = new bootstrap.Modal(document.getElementById('surveyModal'));
+                        surveyModal.show();
+                        loadSurveys();
+                        break;
+                    case 'complaint':
+                        const complaintModal = new bootstrap.Modal(document.getElementById('complaintModal'));
+                        complaintModal.show();
+                        break;
+                    case 'magazineSubmit':
+                        scrollToSection('magazine');
+                        setTimeout(() => showToast('✅ You\'re logged in! Submit your article below.', 'success'), 600);
+                        break;
+                    default:
+                        console.log('Unknown pending action:', action);
+                }
+            }, 500);
         }
 
         /**
