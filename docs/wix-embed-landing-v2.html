@@ -4677,37 +4677,42 @@
         }
 
         function approveSongRequest(btn) {
-            // Handle case where btn is not a DOM element (e.g., called programmatically)
-            if (!btn || typeof btn.closest !== 'function') {
-                // Try to find the button via the event or fallback to first pending request
-                try { btn = (typeof event !== 'undefined' && event && event.target) ? event.target : null; } catch(ex) { btn = null; }
-                if (!btn || typeof btn.closest !== 'function') {
-                    const pending = document.querySelector('#radioRequestsTable .badge.bg-warning');
-                    if (pending) { const row = pending.closest('tr'); if (row) btn = row.querySelector('button'); }
-                }
-            }
+            // Resolve btn to a real DOM element — handles this=undefined from programmatic calls
+            try {
+                if (btn && typeof btn.closest === 'function') { /* btn is already a DOM element */ }
+                else if (btn instanceof HTMLElement) { /* HTMLElement but missing closest — shouldn't happen */ }
+                else { btn = null; }
+            } catch(ex) { btn = null; }
+            // Fallback: try event.target if available
+            if (!btn) { try { if (typeof event !== 'undefined' && event && event.target && event.target.closest) btn = event.target; } catch(ex) { /* no event */ } }
+            // Fallback: find first pending request row
+            if (!btn) { try { var p = document.querySelector('#radioRequestsTable .badge.bg-warning'); if (p) { var r = p.closest('tr'); if (r) btn = r.querySelector('button'); } } catch(ex) {} }
+            // If still no valid btn, show graceful demo alert
             if (!btn || typeof btn.closest !== 'function') { alert('Song request approved — Demo'); return; }
-            const row = btn.closest('tr');
+            var row = btn.closest('tr');
             if (!row) { alert('Song request approved — Demo'); return; }
-            const song = row.cells[1] ? row.cells[1].textContent : 'Unknown';
+            var song = row.cells[1] ? row.cells[1].textContent : 'Unknown';
             row.style.background = '#d4edda';
             if (row.cells[3]) row.cells[3].innerHTML = '<span class="badge bg-success">Approved</span>';
             alert('Song request approved: ' + song + ' — Demo');
         }
 
         function rejectSongRequest(btn) {
-            // Handle case where btn is not a DOM element (e.g., called programmatically)
-            if (!btn || typeof btn.closest !== 'function') {
-                try { btn = (typeof event !== 'undefined' && event && event.target) ? event.target : null; } catch(ex) { btn = null; }
-                if (!btn || typeof btn.closest !== 'function') {
-                    const pending = document.querySelector('#radioRequestsTable .badge.bg-warning');
-                    if (pending) { const row = pending.closest('tr'); if (row) btn = row.querySelector('button'); }
-                }
-            }
+            // Resolve btn to a real DOM element — handles this=undefined from programmatic calls
+            try {
+                if (btn && typeof btn.closest === 'function') { /* btn is already a DOM element */ }
+                else if (btn instanceof HTMLElement) { /* HTMLElement but missing closest */ }
+                else { btn = null; }
+            } catch(ex) { btn = null; }
+            // Fallback: try event.target if available
+            if (!btn) { try { if (typeof event !== 'undefined' && event && event.target && event.target.closest) btn = event.target; } catch(ex) { /* no event */ } }
+            // Fallback: find first pending request row
+            if (!btn) { try { var p = document.querySelector('#radioRequestsTable .badge.bg-warning'); if (p) { var r = p.closest('tr'); if (r) btn = r.querySelector('button'); } } catch(ex) {} }
+            // If still no valid btn, show graceful demo alert
             if (!btn || typeof btn.closest !== 'function') { alert('Song request rejected — Demo'); return; }
-            const row = btn.closest('tr');
+            var row = btn.closest('tr');
             if (!row) { alert('Song request rejected — Demo'); return; }
-            const song = row.cells[1] ? row.cells[1].textContent : 'Unknown';
+            var song = row.cells[1] ? row.cells[1].textContent : 'Unknown';
             row.style.background = '#f8d7da';
             if (row.cells[3]) row.cells[3].innerHTML = '<span class="badge bg-danger">Rejected</span>';
             alert('Song request rejected: ' + song + ' — Demo');
@@ -6950,7 +6955,7 @@
                     <div id="sendEviteFormContainer" style="display:none; margin-bottom: 2rem;">
                         <div class="admin-card" style="border: 2px solid var(--gold);">
                             <h4><i class="fas fa-paper-plane me-2"></i>Compose Invitation</h4>
-                            <form id="sendEviteForm" onsubmit="try{return handleSendEvite(event)}catch(ex){return handleSendEvite()}">
+                            <form id="sendEviteForm" onsubmit="event&&event.preventDefault&&event.preventDefault();handleSendEvite(event||{});return false;">
                                 <div class="row g-3">
                                     <div class="col-md-6">
                                         <label class="form-label fw-bold">Event Name *</label>
@@ -8174,7 +8179,7 @@
                     <div id="gmailTabCompose" class="gmail-tab-content" style="display:none">
                         <div class="admin-card" style="border:2px solid var(--gold);">
                             <h4><i class="fas fa-pen-fancy me-2"></i>Compose Email</h4>
-                            <form id="gmailComposeForm" onsubmit="try{return gmailSendEmail(event)}catch(ex){return gmailSendEmail()}">
+                            <form id="gmailComposeForm" onsubmit="event&&event.preventDefault&&event.preventDefault();gmailSendEmail(event||{});return false;">
                                 <div class="row g-3">
                                     <div class="col-12">
                                         <label class="form-label fw-bold">To *</label>
@@ -13090,20 +13095,23 @@
         }
 
         function gmailShowTab(tab, clickedEl) {
-            ['inbox','compose','contacts','search'].forEach(t => {
-                const el = document.getElementById('gmailTab' + t.charAt(0).toUpperCase() + t.slice(1));
+            ['inbox','compose','contacts','search'].forEach(function(t) {
+                var el = document.getElementById('gmailTab' + t.charAt(0).toUpperCase() + t.slice(1));
                 if (el) el.style.display = (t === tab) ? 'block' : 'none';
             });
-            document.querySelectorAll('#gmailTabs .nav-link').forEach(a => a.classList.remove('active'));
-            const fallbackActive = {
+            document.querySelectorAll('#gmailTabs .nav-link').forEach(function(a) { a.classList.remove('active'); });
+            // Determine which nav link to mark active — use explicit selectors (reliable in all contexts)
+            var navSelectors = {
                 inbox: '#gmailTabs .nav-item:nth-child(1) .nav-link',
                 compose: '#gmailTabs .nav-item:nth-child(2) .nav-link',
                 contacts: '#gmailTabs .nav-item:nth-child(3) .nav-link',
                 search: '#gmailTabs .nav-item:nth-child(4) .nav-link'
             };
-            let target = clickedEl || null;
-            if (!target) { try { if (typeof event !== 'undefined' && event) { var et = event.target; if (et) target = et; } } catch(ex) { /* no event context */ } }
-            if (!target) target = document.querySelector(fallbackActive[tab] || fallbackActive.inbox);
+            var target = null;
+            // Prefer explicit clickedEl if passed
+            if (clickedEl && clickedEl.classList) { target = clickedEl; }
+            // Fallback: use CSS selector for the tab
+            if (!target) { target = document.querySelector(navSelectors[tab] || navSelectors.inbox); }
             if (target) target.classList.add('active');
             if (tab === 'inbox') gmailLoadInbox();
             if (tab === 'contacts') gmailLoadContactGroups();
