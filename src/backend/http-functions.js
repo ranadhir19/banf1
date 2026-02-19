@@ -639,7 +639,7 @@ async function getSendGridKey() {
     if (_sendgridKey) return _sendgridKey;
     try {
         const { getSecret } = await import('wix-secrets-backend');
-        _sendgridKey = await getSecret('sendgrid_api_key');
+        _sendgridKey = await getSecret('banf');
         return _sendgridKey;
     } catch (e) {
         console.error('SendGrid key not found:', e.message);
@@ -821,7 +821,7 @@ export async function post_send_email(request) {
 
         const apiKey = await getSendGridKey();
         if (!apiKey) {
-            return errorResponse('Email service not configured. Set sendgrid_api_key in Wix Secrets Manager.', 503);
+            return errorResponse('Email service not configured. Set "banf" secret in Wix Secrets Manager.', 503);
         }
 
         const result = await sendViaSendGrid(body, apiKey);
