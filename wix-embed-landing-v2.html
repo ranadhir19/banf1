@@ -13595,7 +13595,7 @@
             document.getElementById('magazineTitle').value = item ? item.title : '';
             document.getElementById('magazineAuthor').value = item ? item.author : '';
             document.getElementById('magazineType').value = item ? item.type : 'Article';
-            document.getElementById('magazineSummary').value = item ? item.summary : '';
+            document.getElementById('magazineContent').value = item ? item.summary : '';
             document.getElementById('magazineStatus').value = item ? item.status : 'Pending';
             modal.style.display = 'block';
         }
@@ -13603,7 +13603,7 @@
         function saveMagazineSubmission() {
             const data = adminMagazineStore.load();
             const editId = document.getElementById('magazineEditId').value;
-            const summary = document.getElementById('magazineSummary').value;
+            const summary = document.getElementById('magazineContent').value;
             const obj = { title: document.getElementById('magazineTitle').value, author: document.getElementById('magazineAuthor').value, type: document.getElementById('magazineType').value, summary: summary, status: document.getElementById('magazineStatus').value, wordCount: summary.split(/\s+/).filter(w=>w).length * 10 };
             if (!obj.title) { alert('Title is required'); return; }
             if (editId) { const idx = data.findIndex(d => d.id == editId); if (idx > -1) Object.assign(data[idx], obj); }
@@ -13865,8 +13865,8 @@
                 <p><strong>Minutes:</strong><br>${escapeHtml(item.minutes || 'No minutes recorded')}</p>
                 <p><strong>Action Items:</strong></p><ul>${(item.actionItems||'').split('\n').filter(a=>a.trim()).map(a=>'<li>'+escapeHtml(a)+'</li>').join('')}</ul>`;
             const div = document.createElement('div'); div.innerHTML = `<div class="modal fade" tabindex="-1"><div class="modal-dialog modal-lg"><div class="modal-content"><div class="modal-header bg-dark text-white"><h5 class="modal-title">Meeting Minutes</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div><div class="modal-body">${content}</div></div></div></div>`;
-            document.body.appendChild(div.firstChild); new bootstrap.Modal(div.firstChild).show();
-            div.firstChild.addEventListener('hidden.bs.modal', function() { this.remove(); });
+            const modalEl = div.firstChild; document.body.appendChild(modalEl); new bootstrap.Modal(modalEl).show();
+            modalEl.addEventListener('hidden.bs.modal', function() { this.remove(); });
         }
 
         // ────────────── SHARED DELETE UTILITY ──────────────
