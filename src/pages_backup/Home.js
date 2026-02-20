@@ -456,7 +456,7 @@ async function loadMagazinePreview() {
 // ============================================================
 async function loadSponsorShowcase() {
     try {
-        const { getActiveSponsors } = await import('backend/sponsors.jsw');
+        const { getActiveSponsors } = await import('backend/sponsor-management.jsw');
         const sponsors = await getActiveSponsors();
         
         // Featured sponsors (Platinum & Gold)
