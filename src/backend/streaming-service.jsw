@@ -908,3 +908,52 @@ export async function processScheduledNotifications() {
         return { success: false, error: error.message };
     }
 }
+
+// Backward-compatible aliases
+export async function getCurrentShow() {
+    try {
+        const live = await wixData.query('StreamingEvents')
+            .eq('status', 'live')
+            .descending('actualStartTime')
+            .limit(1)
+            .find({ suppressAuth: true });
+
+        return live.items[0] || null;
+    } catch {
+        return null;
+    }
+}
+
+export async function getUpcomingShows(limit = 10) {
+    return getUpcomingStreams(limit);
+}
+
+export async function getSchedule(limit = 20) {
+    try {
+        const [live, upcoming] = await Promise.all([
+            getLiveStreams(),
+            getUpcomingStreams(limit)
+        ]);
+        return {
+            success: true,
+            live: live || [],
+            upcoming: upcoming || []
+        };
+    } catch (error) {
+        return { success: false, error: error.message, live: [], upcoming: [] };
+    }
+}
+
+export async function getStreamStatus() {
+    try {
+        const live = await getLiveStreams();
+        const current = Array.isArray(live) && live.length > 0 ? live[0] : null;
+        return {
+            success: true,
+            isLive: !!current,
+            currentStream: current
+        };
+    } catch (error) {
+        return { success: false, error: error.message, isLive: false };
+    }
+}

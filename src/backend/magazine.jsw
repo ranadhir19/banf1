@@ -452,3 +452,43 @@ export async function getPopularArticles(limit = 10) {
 // Export constants
 export const ArticleStatus = ARTICLE_STATUS;
 export const ArticleCategories = ARTICLE_CATEGORIES;
+
+// Backward-compatible aliases
+export async function getMagazineIssues(options = { limit: 12, skip: 0 }) {
+    return getPublishedMagazines(options);
+}
+
+export async function getMagazineIssue(magazineId) {
+    return getMagazineById(magazineId);
+}
+
+export async function getLatestIssue() {
+    return getLatestMagazine();
+}
+
+export async function getRecentArticles(limit = 10) {
+    try {
+        const result = await wixData.query('EMagazineArticles')
+            .eq('status', ARTICLE_STATUS.PUBLISHED)
+            .descending('publishedDate')
+            .limit(limit)
+            .find({ suppressAuth: true });
+
+        return result.items;
+    } catch {
+        return [];
+    }
+}
+
+export async function getArticles(options = { limit: 20, skip: 0, category: null }) {
+    if (options?.category) {
+        return getArticlesByCategory(options.category, options);
+    }
+
+    const recent = await getRecentArticles(options?.limit || 20);
+    return {
+        items: recent,
+        totalCount: recent.length,
+        hasNext: false
+    };
+}

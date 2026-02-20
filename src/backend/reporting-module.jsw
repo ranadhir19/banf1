@@ -700,3 +700,24 @@ function convertToPDF(data) {
     // PDF conversion implementation
     return JSON.stringify(data);
 }
+
+/**
+ * Backward-compatible report history API.
+ */
+export async function getReportHistory(userId, limit = 50) {
+    try {
+        const hasPermission = await hasSpecializedPermission(userId, 'reports_generate');
+        if (!hasPermission) {
+            return { success: false, error: 'Not authorized', reports: [] };
+        }
+
+        const reports = await wixData.query('ReportHistory')
+            .descending('generatedAt')
+            .limit(limit)
+            .find({ suppressAuth: true });
+
+        return { success: true, reports: reports.items };
+    } catch (error) {
+        return { success: false, error: error.message, reports: [] };
+    }
+}

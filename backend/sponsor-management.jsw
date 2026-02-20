@@ -1109,3 +1109,47 @@ export function getSponsorshipTiers() {
         ...tier
     }));
 }
+
+export async function getActiveSponsors(eventId = null) {
+    try {
+        let query = wixData.query('Sponsors')
+            .hasSome('status', [SPONSOR_STATUS.ACTIVE, SPONSOR_STATUS.APPROVED]);
+        if (eventId) {
+            query = query.eq('eventId', eventId);
+        }
+
+        const result = await query
+            .ascending('tier')
+            .ascending('companyName')
+            .find({ suppressAuth: true });
+
+        return { success: true, sponsors: result.items };
+    } catch (error) {
+        return { success: false, error: error.message, sponsors: [] };
+    }
+}
+
+export async function getSponsorsByTier(eventId = null) {
+    const active = await getActiveSponsors(eventId);
+    if (!active?.success) {
+        return active;
+    }
+
+    const grouped = active.sponsors.reduce((acc, s) => {
+        const tier = s.tier || 'SUPPORTER';
+        if (!acc[tier]) acc[tier] = [];
+        acc[tier].push(s);
+        return acc;
+    }, {});
+
+    return { success: true, tiers: grouped };
+}
+
+export async function getSponsorDetails(sponsorId) {
+    try {
+        const sponsor = await wixData.get('Sponsors', sponsorId, { suppressAuth: true });
+        return { success: true, sponsor };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
+}

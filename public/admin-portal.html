@@ -1,0 +1,1541 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EC Admin Portal - Bengali Association of North Florida</title>
+    
+    <!-- Bootstrap 5 -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@300;400;500;600;700&family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            --banf-orange: #FF6B35;
+            --banf-deep-red: #8B0000;
+            --banf-crimson: #DC143C;
+            --banf-gold: #D4AF37;
+            --banf-charcoal: #2D2D2D;
+            --gradient-admin: linear-gradient(135deg, #8B0000, #DC143C);
+            --gradient-danger: linear-gradient(135deg, #C62828, #EF5350);
+        }
+        
+        * {
+            font-family: 'Poppins', 'Hind Siliguri', sans-serif;
+            box-sizing: border-box;
+        }
+        
+        body {
+            background: #f5f7fa;
+            margin: 0;
+            padding: 0;
+        }
+        
+        /* ========== HEADER ========== */
+        .admin-header {
+            background: var(--gradient-admin);
+            color: #fff;
+            padding: 1rem 0;
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            box-shadow: 0 4px 20px rgba(139,0,0,0.3);
+        }
+        
+        .admin-header .container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .portal-logo {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+        
+        .portal-logo img {
+            height: 50px;
+            border-radius: 50%;
+        }
+        
+        .portal-logo h1 {
+            font-size: 1.5rem;
+            margin: 0;
+            font-weight: 700;
+        }
+        
+        .portal-logo span {
+            font-size: 0.9rem;
+            opacity: 0.9;
+        }
+        
+        .role-badge {
+            background: rgba(255,255,255,0.2);
+            padding: 0.3rem 1rem;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+        
+        .user-menu {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+        
+        .user-avatar {
+            width: 45px;
+            height: 45px;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+        }
+        
+        .btn-logout {
+            background: rgba(255,255,255,0.2);
+            color: #fff;
+            border: none;
+            padding: 0.5rem 1.25rem;
+            border-radius: 25px;
+            font-size: 0.9rem;
+            transition: all 0.3s;
+        }
+        
+        .btn-logout:hover {
+            background: rgba(255,255,255,0.3);
+            color: #fff;
+        }
+        
+        /* ========== MAIN LAYOUT ========== */
+        .portal-container {
+            display: flex;
+            min-height: calc(100vh - 80px);
+        }
+        
+        /* ========== SIDEBAR ========== */
+        .sidebar {
+            width: 280px;
+            background: #fff;
+            border-right: 1px solid #e0e0e0;
+            padding: 1.5rem 0;
+            position: sticky;
+            top: 80px;
+            height: calc(100vh - 80px);
+            overflow-y: auto;
+        }
+        
+        .sidebar-section {
+            margin-bottom: 1.5rem;
+            padding: 0 1rem;
+        }
+        
+        .sidebar-section h6 {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            color: #888;
+            font-weight: 600;
+            margin-bottom: 0.75rem;
+            padding-left: 0.75rem;
+        }
+        
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.85rem 1rem;
+            border-radius: 12px;
+            color: var(--banf-charcoal);
+            text-decoration: none;
+            margin-bottom: 0.25rem;
+            transition: all 0.3s;
+            font-size: 0.95rem;
+        }
+        
+        .nav-item:hover {
+            background: rgba(139,0,0,0.08);
+            color: var(--banf-deep-red);
+        }
+        
+        .nav-item.active {
+            background: var(--gradient-admin);
+            color: #fff;
+        }
+        
+        .nav-item i {
+            width: 24px;
+            text-align: center;
+            font-size: 1.1rem;
+        }
+        
+        .nav-badge {
+            margin-left: auto;
+            background: var(--banf-crimson);
+            color: #fff;
+            font-size: 0.7rem;
+            padding: 0.2rem 0.5rem;
+            border-radius: 10px;
+            font-weight: 600;
+        }
+        
+        .nav-badge.warning {
+            background: #FFA000;
+        }
+        
+        /* ========== MAIN CONTENT ========== */
+        .main-content {
+            flex: 1;
+            padding: 2rem;
+            overflow-y: auto;
+        }
+        
+        .page-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+        
+        .page-header h2 {
+            font-size: 1.75rem;
+            font-weight: 700;
+            color: var(--banf-charcoal);
+            margin: 0;
+        }
+        
+        .page-header p {
+            color: #666;
+            margin: 0;
+        }
+        
+        /* ========== STATS CARDS ========== */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+        
+        .stat-card {
+            background: #fff;
+            border-radius: 16px;
+            padding: 1.5rem;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            transition: all 0.3s;
+            border-left: 4px solid;
+        }
+        
+        .stat-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.1);
+        }
+        
+        .stat-card.red { border-color: var(--banf-crimson); }
+        .stat-card.green { border-color: #4CAF50; }
+        .stat-card.orange { border-color: var(--banf-orange); }
+        .stat-card.blue { border-color: #2196F3; }
+        
+        .stat-icon {
+            width: 55px;
+            height: 55px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.4rem;
+            color: #fff;
+        }
+        
+        .stat-icon.red { background: var(--gradient-admin); }
+        .stat-icon.green { background: linear-gradient(135deg, #4CAF50, #8BC34A); }
+        .stat-icon.orange { background: linear-gradient(135deg, #FF6B35, #FF9800); }
+        .stat-icon.blue { background: linear-gradient(135deg, #2196F3, #03A9F4); }
+        
+        .stat-info h3 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin: 0;
+            color: var(--banf-charcoal);
+        }
+        
+        .stat-info p {
+            font-size: 0.85rem;
+            color: #888;
+            margin: 0;
+        }
+        
+        /* ========== ACTION BUTTONS ========== */
+        .btn-admin {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.75rem 1.5rem;
+            background: var(--gradient-admin);
+            color: #fff;
+            border: none;
+            border-radius: 30px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-decoration: none;
+        }
+        
+        .btn-admin:hover {
+            transform: scale(1.05);
+            box-shadow: 0 6px 20px rgba(139,0,0,0.3);
+            color: #fff;
+        }
+        
+        .btn-admin.secondary {
+            background: #f0f0f0;
+            color: var(--banf-charcoal);
+        }
+        
+        .btn-admin.secondary:hover {
+            background: #e0e0e0;
+        }
+        
+        .btn-admin.success {
+            background: linear-gradient(135deg, #4CAF50, #8BC34A);
+        }
+        
+        .btn-admin.warning {
+            background: linear-gradient(135deg, #FF9800, #FFC107);
+        }
+        
+        /* ========== DATA TABLES ========== */
+        .data-table {
+            background: #fff;
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+        }
+        
+        .data-table table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        .data-table th {
+            background: var(--banf-deep-red);
+            color: #fff;
+            padding: 1rem;
+            text-align: left;
+            font-weight: 600;
+            font-size: 0.85rem;
+        }
+        
+        .data-table td {
+            padding: 1rem;
+            border-bottom: 1px solid #eee;
+            font-size: 0.9rem;
+            vertical-align: middle;
+        }
+        
+        .data-table tr:hover td {
+            background: rgba(139,0,0,0.03);
+        }
+        
+        .status-badge {
+            display: inline-block;
+            padding: 0.3rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+        
+        .status-badge.active { background: #d4edda; color: #155724; }
+        .status-badge.pending { background: #fff3cd; color: #856404; }
+        .status-badge.expired { background: #f8d7da; color: #721c24; }
+        .status-badge.new { background: #e3f2fd; color: #1565c0; }
+        
+        /* ========== ADMIN CARDS ========== */
+        .admin-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1.5rem;
+        }
+        
+        .admin-card {
+            background: #fff;
+            border-radius: 16px;
+            padding: 1.5rem;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+            transition: all 0.3s;
+        }
+        
+        .admin-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.1);
+        }
+        
+        .admin-card-header {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+        
+        .admin-card-icon {
+            width: 50px;
+            height: 50px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.25rem;
+            color: #fff;
+            background: var(--gradient-admin);
+        }
+        
+        .admin-card h4 {
+            margin: 0;
+            font-size: 1.1rem;
+            font-weight: 600;
+        }
+        
+        .admin-card p {
+            color: #666;
+            font-size: 0.9rem;
+            margin-bottom: 1rem;
+        }
+        
+        /* ========== QUICK ACTIONS ========== */
+        .quick-actions {
+            display: flex;
+            gap: 0.75rem;
+            flex-wrap: wrap;
+        }
+        
+        .quick-action-btn {
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            border: 1px solid #ddd;
+            background: #fff;
+            color: var(--banf-charcoal);
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .quick-action-btn:hover {
+            border-color: var(--banf-crimson);
+            color: var(--banf-crimson);
+        }
+        
+        /* ========== CONTENT SECTIONS ========== */
+        .content-section {
+            display: none;
+        }
+        
+        .content-section.active {
+            display: block;
+        }
+        
+        /* ========== FORMS ========== */
+        .form-card {
+            background: #fff;
+            border-radius: 16px;
+            padding: 2rem;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+        }
+        
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+        
+        .form-group label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            color: var(--banf-charcoal);
+        }
+        
+        .form-control {
+            width: 100%;
+            padding: 0.85rem 1rem;
+            border: 2px solid #e0e0e0;
+            border-radius: 12px;
+            font-size: 1rem;
+            transition: all 0.3s;
+        }
+        
+        .form-control:focus {
+            outline: none;
+            border-color: var(--banf-crimson);
+            box-shadow: 0 0 0 4px rgba(139,0,0,0.1);
+        }
+        
+        /* ========== FILTER BAR ========== */
+        .filter-bar {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        
+        .filter-bar input,
+        .filter-bar select {
+            padding: 0.6rem 1rem;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 0.9rem;
+        }
+        
+        .filter-bar input:focus,
+        .filter-bar select:focus {
+            outline: none;
+            border-color: var(--banf-crimson);
+        }
+        
+        /* ========== MOBILE RESPONSIVE ========== */
+        @media (max-width: 992px) {
+            .portal-container {
+                flex-direction: column;
+            }
+            
+            .sidebar {
+                width: 100%;
+                height: auto;
+                position: relative;
+                top: 0;
+                border-right: none;
+                border-bottom: 1px solid #e0e0e0;
+                display: flex;
+                overflow-x: auto;
+                padding: 1rem;
+            }
+            
+            .sidebar-section {
+                display: flex;
+                gap: 0.5rem;
+                margin-bottom: 0;
+            }
+            
+            .sidebar-section h6 {
+                display: none;
+            }
+            
+            .nav-item {
+                white-space: nowrap;
+                padding: 0.6rem 1rem;
+            }
+            
+            .nav-item span {
+                display: none;
+            }
+            
+            .main-content {
+                padding: 1rem;
+            }
+            
+            .admin-cards {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        /* ========== ANIMATIONS ========== */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .content-section.active {
+            animation: fadeIn 0.4s ease;
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <header class="admin-header">
+        <div class="container">
+            <div class="portal-logo">
+                <img src="https://static.wixstatic.com/media/c62f94_banf_logo.png" alt="BANF Logo" onerror="this.style.display='none'">
+                <div>
+                    <h1>EC Admin Portal</h1>
+                    <span>Bengali Association of North Florida</span>
+                </div>
+            </div>
+            <div class="user-menu">
+                <span class="role-badge" id="adminRole">President</span>
+                <div class="user-avatar">
+                    <i class="fas fa-user-shield"></i>
+                </div>
+                <span id="adminName">Admin</span>
+                <button class="btn-logout" onclick="logout()">
+                    <i class="fas fa-sign-out-alt me-1"></i> Logout
+                </button>
+            </div>
+        </div>
+    </header>
+    
+    <div class="portal-container">
+        <!-- Sidebar Navigation -->
+        <nav class="sidebar">
+            <div class="sidebar-section">
+                <h6>Dashboard</h6>
+                <a href="#dashboard" class="nav-item active" onclick="showSection('dashboard', this)">
+                    <i class="fas fa-chart-line"></i>
+                    <span>Overview</span>
+                </a>
+            </div>
+            
+            <div class="sidebar-section">
+                <h6>Member Management</h6>
+                <a href="#members" class="nav-item" onclick="showSection('members', this)">
+                    <i class="fas fa-users"></i>
+                    <span>All Members</span>
+                </a>
+                <a href="#payments" class="nav-item" onclick="showSection('payments', this)">
+                    <i class="fas fa-credit-card"></i>
+                    <span>Payment Verification</span>
+                    <span class="nav-badge warning">5</span>
+                </a>
+            </div>
+            
+            <div class="sidebar-section">
+                <h6>Events</h6>
+                <a href="#events" class="nav-item" onclick="showSection('events', this)">
+                    <i class="fas fa-calendar-alt"></i>
+                    <span>Event Management</span>
+                </a>
+                <a href="#rsvps" class="nav-item" onclick="showSection('rsvps', this)">
+                    <i class="fas fa-user-check"></i>
+                    <span>RSVPs & Check-ins</span>
+                </a>
+            </div>
+            
+            <div class="sidebar-section">
+                <h6>Communication</h6>
+                <a href="#complaints" class="nav-item" onclick="showSection('complaints', this)">
+                    <i class="fas fa-exclamation-circle"></i>
+                    <span>Complaints</span>
+                    <span class="nav-badge">3</span>
+                </a>
+                <a href="#surveys" class="nav-item" onclick="showSection('surveys', this)">
+                    <i class="fas fa-poll"></i>
+                    <span>Survey Admin</span>
+                </a>
+                <a href="#announcements" class="nav-item" onclick="showSection('announcements', this)">
+                    <i class="fas fa-bullhorn"></i>
+                    <span>Announcements</span>
+                </a>
+            </div>
+            
+            <div class="sidebar-section">
+                <h6>Media</h6>
+                <a href="#radio" class="nav-item" onclick="showSection('radio', this)">
+                    <i class="fas fa-broadcast-tower"></i>
+                    <span>Radio Control</span>
+                </a>
+                <a href="#magazine" class="nav-item" onclick="showSection('magazine', this)">
+                    <i class="fas fa-newspaper"></i>
+                    <span>Magazine Admin</span>
+                </a>
+            </div>
+            
+            <div class="sidebar-section">
+                <h6>Finance</h6>
+                <a href="#budget" class="nav-item" onclick="showSection('budget', this)">
+                    <i class="fas fa-wallet"></i>
+                    <span>Budget & Finance</span>
+                </a>
+                <a href="#vendors" class="nav-item" onclick="showSection('vendors', this)">
+                    <i class="fas fa-store"></i>
+                    <span>Vendors & Sponsors</span>
+                </a>
+            </div>
+            
+            <div class="sidebar-section">
+                <h6>Operations</h6>
+                <a href="#volunteers" class="nav-item" onclick="showSection('volunteers', this)">
+                    <i class="fas fa-hands-helping"></i>
+                    <span>Volunteers</span>
+                </a>
+                <a href="#meetings" class="nav-item" onclick="showSection('meetings', this)">
+                    <i class="fas fa-clipboard-list"></i>
+                    <span>Meeting Minutes</span>
+                </a>
+            </div>
+        </nav>
+        
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Dashboard Section -->
+            <section id="dashboard" class="content-section active">
+                <div class="page-header">
+                    <div>
+                        <h2>Admin Dashboard</h2>
+                        <p>Welcome back! Here's your BANF management overview.</p>
+                    </div>
+                    <button class="btn-admin" onclick="exportReport()">
+                        <i class="fas fa-download"></i> Export Report
+                    </button>
+                </div>
+                
+                <!-- Stats -->
+                <div class="stats-grid">
+                    <div class="stat-card red">
+                        <div class="stat-icon red"><i class="fas fa-users"></i></div>
+                        <div class="stat-info">
+                            <h3>156</h3>
+                            <p>Total Members</p>
+                        </div>
+                    </div>
+                    <div class="stat-card green">
+                        <div class="stat-icon green"><i class="fas fa-dollar-sign"></i></div>
+                        <div class="stat-info">
+                            <h3>$12,450</h3>
+                            <p>Revenue (YTD)</p>
+                        </div>
+                    </div>
+                    <div class="stat-card orange">
+                        <div class="stat-icon orange"><i class="fas fa-calendar-check"></i></div>
+                        <div class="stat-info">
+                            <h3>5</h3>
+                            <p>Upcoming Events</p>
+                        </div>
+                    </div>
+                    <div class="stat-card blue">
+                        <div class="stat-icon blue"><i class="fas fa-tasks"></i></div>
+                        <div class="stat-info">
+                            <h3>8</h3>
+                            <p>Pending Actions</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Quick Action Cards -->
+                <h4 style="margin-bottom: 1rem;">Quick Actions</h4>
+                <div class="admin-cards">
+                    <div class="admin-card">
+                        <div class="admin-card-header">
+                            <div class="admin-card-icon"><i class="fas fa-credit-card"></i></div>
+                            <div>
+                                <h4>Payment Verification</h4>
+                                <span class="status-badge pending">5 Pending</span>
+                            </div>
+                        </div>
+                        <p>Review and verify pending membership and event payments.</p>
+                        <div class="quick-actions">
+                            <button class="quick-action-btn" onclick="showSection('payments')"><i class="fas fa-check"></i> Review</button>
+                            <button class="quick-action-btn"><i class="fas fa-list"></i> View All</button>
+                        </div>
+                    </div>
+                    
+                    <div class="admin-card">
+                        <div class="admin-card-header">
+                            <div class="admin-card-icon" style="background: linear-gradient(135deg, #FF9800, #FFC107);"><i class="fas fa-exclamation-circle"></i></div>
+                            <div>
+                                <h4>Complaint Resolution</h4>
+                                <span class="status-badge new">3 New</span>
+                            </div>
+                        </div>
+                        <p>Address member complaints and feedback submissions.</p>
+                        <div class="quick-actions">
+                            <button class="quick-action-btn" onclick="showSection('complaints')"><i class="fas fa-eye"></i> View</button>
+                            <button class="quick-action-btn"><i class="fas fa-reply"></i> Respond</button>
+                        </div>
+                    </div>
+                    
+                    <div class="admin-card">
+                        <div class="admin-card-header">
+                            <div class="admin-card-icon" style="background: linear-gradient(135deg, #673AB7, #9C27B0);"><i class="fas fa-music"></i></div>
+                            <div>
+                                <h4>Radio Management</h4>
+                                <span class="status-badge active">Online</span>
+                            </div>
+                        </div>
+                        <p>Manage playlists, approve song requests, and control radio.</p>
+                        <div class="quick-actions">
+                            <button class="quick-action-btn" onclick="showSection('radio')"><i class="fas fa-cog"></i> Manage</button>
+                            <button class="quick-action-btn"><i class="fas fa-list-music"></i> Playlist</button>
+                        </div>
+                    </div>
+                    
+                    <div class="admin-card">
+                        <div class="admin-card-header">
+                            <div class="admin-card-icon" style="background: linear-gradient(135deg, #4CAF50, #8BC34A);"><i class="fas fa-user-plus"></i></div>
+                            <div>
+                                <h4>New Registrations</h4>
+                                <span class="status-badge new">2 New</span>
+                            </div>
+                        </div>
+                        <p>Review and approve new member registrations.</p>
+                        <div class="quick-actions">
+                            <button class="quick-action-btn" onclick="showSection('members')"><i class="fas fa-check-circle"></i> Approve</button>
+                            <button class="quick-action-btn"><i class="fas fa-users"></i> All Members</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+            
+            <!-- Members Section -->
+            <section id="members" class="content-section">
+                <div class="page-header">
+                    <div>
+                        <h2>Member Management</h2>
+                        <p>View and manage all BANF members</p>
+                    </div>
+                    <button class="btn-admin" onclick="addMember()">
+                        <i class="fas fa-user-plus"></i> Add Member
+                    </button>
+                </div>
+                
+                <div class="filter-bar">
+                    <input type="text" placeholder="Search members..." style="flex: 1; min-width: 200px;">
+                    <select>
+                        <option value="">All Status</option>
+                        <option value="active">Active</option>
+                        <option value="pending">Pending</option>
+                        <option value="expired">Expired</option>
+                    </select>
+                    <select>
+                        <option value="">All Types</option>
+                        <option value="individual">Individual</option>
+                        <option value="family">Family</option>
+                    </select>
+                    <button class="btn-admin secondary">
+                        <i class="fas fa-search"></i> Search
+                    </button>
+                </div>
+                
+                <div class="data-table">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Member ID</th>
+                                <th>Name</th>
+                                <th>Email</th>
+                                <th>Type</th>
+                                <th>Status</th>
+                                <th>Joined</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>BANF-2024-001</td>
+                                <td>Rajib Das</td>
+                                <td>rajib.das@email.com</td>
+                                <td>Family</td>
+                                <td><span class="status-badge active">Active</span></td>
+                                <td>Jan 2024</td>
+                                <td>
+                                    <button class="quick-action-btn"><i class="fas fa-edit"></i></button>
+                                    <button class="quick-action-btn"><i class="fas fa-eye"></i></button>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>BANF-2024-002</td>
+                                <td>Priya Ghosh</td>
+                                <td>priya.ghosh@email.com</td>
+                                <td>Individual</td>
+                                <td><span class="status-badge active">Active</span></td>
+                                <td>Feb 2024</td>
+                                <td>
+                                    <button class="quick-action-btn"><i class="fas fa-edit"></i></button>
+                                    <button class="quick-action-btn"><i class="fas fa-eye"></i></button>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>BANF-2025-015</td>
+                                <td>Amit Sen</td>
+                                <td>amit.sen@email.com</td>
+                                <td>Family</td>
+                                <td><span class="status-badge pending">Pending</span></td>
+                                <td>Jan 2025</td>
+                                <td>
+                                    <button class="quick-action-btn" style="color: green;"><i class="fas fa-check"></i></button>
+                                    <button class="quick-action-btn" style="color: red;"><i class="fas fa-times"></i></button>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+            
+            <!-- Payments Section -->
+            <section id="payments" class="content-section">
+                <div class="page-header">
+                    <div>
+                        <h2>Payment Verification</h2>
+                        <p>Review and verify pending payments</p>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <button class="btn-admin success">
+                            <i class="fas fa-check-circle"></i> Approve All
+                        </button>
+                        <button class="btn-admin secondary">
+                            <i class="fas fa-download"></i> Export
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="data-table">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Member</th>
+                                <th>Type</th>
+                                <th>Amount</th>
+                                <th>Method</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>Feb 12, 2026</td>
+                                <td>Sunil Banerjee</td>
+                                <td>Membership - Family</td>
+                                <td>$150.00</td>
+                                <td>PayPal</td>
+                                <td><span class="status-badge pending">Pending</span></td>
+                                <td>
+                                    <button class="btn-admin success" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;">Approve</button>
+                                    <button class="btn-admin secondary" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;">Reject</button>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>Feb 11, 2026</td>
+                                <td>Mita Roy</td>
+                                <td>Event - Nabo Borsho</td>
+                                <td>$100.00</td>
+                                <td>Zelle</td>
+                                <td><span class="status-badge pending">Pending</span></td>
+                                <td>
+                                    <button class="btn-admin success" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;">Approve</button>
+                                    <button class="btn-admin secondary" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;">Reject</button>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+            
+            <!-- Events Section -->
+            <section id="events" class="content-section">
+                <div class="page-header">
+                    <div>
+                        <h2>Event Management</h2>
+                        <p>Create and manage BANF events</p>
+                    </div>
+                    <button class="btn-admin">
+                        <i class="fas fa-plus"></i> Create Event
+                    </button>
+                </div>
+                
+                <div class="admin-cards">
+                    <div class="admin-card">
+                        <div class="admin-card-header">
+                            <div class="admin-card-icon" style="background: linear-gradient(135deg, #E91E63, #FF5722);"><i class="fas fa-om"></i></div>
+                            <div>
+                                <h4>Nabo Borsho 1433</h4>
+                                <span class="status-badge active">Published</span>
+                            </div>
+                        </div>
+                        <p><strong>April 25, 2026</strong> • 124 RSVPs</p>
+                        <div class="quick-actions">
+                            <button class="quick-action-btn"><i class="fas fa-edit"></i> Edit</button>
+                            <button class="quick-action-btn"><i class="fas fa-users"></i> RSVPs</button>
+                            <button class="quick-action-btn"><i class="fas fa-chart-bar"></i> Stats</button>
+                        </div>
+                    </div>
+                    
+                    <div class="admin-card">
+                        <div class="admin-card-header">
+                            <div class="admin-card-icon" style="background: linear-gradient(135deg, #4CAF50, #8BC34A);"><i class="fas fa-campground"></i></div>
+                            <div>
+                                <h4>Summer Camp 2026</h4>
+                                <span class="status-badge new">Draft</span>
+                            </div>
+                        </div>
+                        <p><strong>June 2026</strong> • Not published</p>
+                        <div class="quick-actions">
+                            <button class="quick-action-btn"><i class="fas fa-edit"></i> Edit</button>
+                            <button class="quick-action-btn"><i class="fas fa-globe"></i> Publish</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+            
+            <!-- Complaints Section -->
+            <section id="complaints" class="content-section">
+                <div class="page-header">
+                    <div>
+                        <h2>Complaint Resolution</h2>
+                        <p>Address member concerns and feedback</p>
+                    </div>
+                </div>
+                
+                <div class="data-table">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Date</th>
+                                <th>Member</th>
+                                <th>Category</th>
+                                <th>Subject</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>#C-001</td>
+                                <td>Feb 10, 2026</td>
+                                <td>Anonymous</td>
+                                <td>Event</td>
+                                <td>Food quality at last event</td>
+                                <td><span class="status-badge new">New</span></td>
+                                <td>
+                                    <button class="quick-action-btn"><i class="fas fa-eye"></i> View</button>
+                                    <button class="quick-action-btn"><i class="fas fa-reply"></i> Respond</button>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>#C-002</td>
+                                <td>Feb 08, 2026</td>
+                                <td>Member #45</td>
+                                <td>Membership</td>
+                                <td>Payment not reflected</td>
+                                <td><span class="status-badge pending">In Progress</span></td>
+                                <td>
+                                    <button class="quick-action-btn"><i class="fas fa-eye"></i> View</button>
+                                    <button class="quick-action-btn"><i class="fas fa-check"></i> Resolve</button>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+            
+            <!-- Surveys Section -->
+            <section id="surveys" class="content-section">
+                <div class="page-header">
+                    <div>
+                        <h2>Survey Administration</h2>
+                        <p>Create and manage member surveys</p>
+                    </div>
+                    <button class="btn-admin">
+                        <i class="fas fa-plus"></i> Create Survey
+                    </button>
+                </div>
+                
+                <div class="admin-cards">
+                    <div class="admin-card">
+                        <div class="admin-card-header">
+                            <div class="admin-card-icon"><i class="fas fa-utensils"></i></div>
+                            <div>
+                                <h4>Nabo Borsho Menu Survey</h4>
+                                <span class="status-badge active">Active</span>
+                            </div>
+                        </div>
+                        <p>56 responses • Ends Feb 28, 2026</p>
+                        <div class="quick-actions">
+                            <button class="quick-action-btn"><i class="fas fa-chart-pie"></i> Results</button>
+                            <button class="quick-action-btn"><i class="fas fa-edit"></i> Edit</button>
+                            <button class="quick-action-btn"><i class="fas fa-stop"></i> Close</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+            
+            <!-- Radio Section -->
+            <section id="radio" class="content-section">
+                <div class="page-header">
+                    <div>
+                        <h2>Radio Control Panel</h2>
+                        <p>Manage BANF Radio 24/7 broadcasting</p>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <button class="btn-admin success" id="radioStatusBtn">
+                            <i class="fas fa-broadcast-tower"></i> Online
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="row">
+                    <div class="col-lg-6">
+                        <div class="form-card">
+                            <h4><i class="fas fa-list-music me-2"></i>Current Playlist</h4>
+                            <div class="data-table" style="margin-top: 1rem;">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>#</th>
+                                            <th>Song</th>
+                                            <th>Artist</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <td>1</td>
+                                            <td>Amar Shonar Bangla</td>
+                                            <td>Tagore</td>
+                                            <td><button class="quick-action-btn"><i class="fas fa-play"></i></button></td>
+                                        </tr>
+                                        <tr>
+                                            <td>2</td>
+                                            <td>Ekhono To Du'chokh</td>
+                                            <td>Hemanta</td>
+                                            <td><button class="quick-action-btn"><i class="fas fa-play"></i></button></td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-lg-6">
+                        <div class="form-card">
+                            <h4><i class="fas fa-music me-2"></i>Song Requests (3)</h4>
+                            <div class="data-table" style="margin-top: 1rem;">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>Song</th>
+                                            <th>By</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <td>Ami Chini Go Chini</td>
+                                            <td>Member #12</td>
+                                            <td>
+                                                <button class="quick-action-btn" style="color: green;"><i class="fas fa-check"></i></button>
+                                                <button class="quick-action-btn" style="color: red;"><i class="fas fa-times"></i></button>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+            
+            <!-- Budget Section -->
+            <section id="budget" class="content-section">
+                <div class="page-header">
+                    <div>
+                        <h2>Budget & Finance</h2>
+                        <p>Manage BANF financial records</p>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <button class="btn-admin">
+                            <i class="fas fa-plus"></i> Add Transaction
+                        </button>
+                        <button class="btn-admin secondary">
+                            <i class="fas fa-file-pdf"></i> Generate Report
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="stats-grid">
+                    <div class="stat-card green">
+                        <div class="stat-icon green"><i class="fas fa-arrow-up"></i></div>
+                        <div class="stat-info">
+                            <h3>$15,250</h3>
+                            <p>Total Income (YTD)</p>
+                        </div>
+                    </div>
+                    <div class="stat-card red">
+                        <div class="stat-icon red"><i class="fas fa-arrow-down"></i></div>
+                        <div class="stat-info">
+                            <h3>$8,320</h3>
+                            <p>Total Expenses (YTD)</p>
+                        </div>
+                    </div>
+                    <div class="stat-card blue">
+                        <div class="stat-icon blue"><i class="fas fa-balance-scale"></i></div>
+                        <div class="stat-info">
+                            <h3>$6,930</h3>
+                            <p>Net Balance</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+            
+            <!-- Vendors Section -->
+            <section id="vendors" class="content-section">
+                <div class="page-header">
+                    <div>
+                        <h2>Vendors & Sponsors</h2>
+                        <p>Manage event vendors and sponsors</p>
+                    </div>
+                    <button class="btn-admin">
+                        <i class="fas fa-plus"></i> Add Vendor
+                    </button>
+                </div>
+                
+                <div class="data-table">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Type</th>
+                                <th>Category</th>
+                                <th>Contact</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>Spice Kitchen</td>
+                                <td>Vendor</td>
+                                <td>Catering</td>
+                                <td>info@spicekitchen.com</td>
+                                <td><span class="status-badge active">Active</span></td>
+                                <td>
+                                    <button class="quick-action-btn"><i class="fas fa-edit"></i></button>
+                                    <button class="quick-action-btn"><i class="fas fa-eye"></i></button>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>Bengal Sound</td>
+                                <td>Vendor</td>
+                                <td>Audio/Visual</td>
+                                <td>contact@bengalsound.com</td>
+                                <td><span class="status-badge active">Active</span></td>
+                                <td>
+                                    <button class="quick-action-btn"><i class="fas fa-edit"></i></button>
+                                    <button class="quick-action-btn"><i class="fas fa-eye"></i></button>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+            
+            <!-- Volunteers Section -->
+            <section id="volunteers" class="content-section">
+                <div class="page-header">
+                    <div>
+                        <h2>Volunteer Coordination</h2>
+                        <p>Manage event volunteers and assignments</p>
+                    </div>
+                    <button class="btn-admin">
+                        <i class="fas fa-user-plus"></i> Add Volunteer
+                    </button>
+                </div>
+                
+                <div class="data-table">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Events Volunteered</th>
+                                <th>Hours</th>
+                                <th>Skills</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>Rina Chakraborty</td>
+                                <td>12</td>
+                                <td>48 hrs</td>
+                                <td>Food, Registration</td>
+                                <td><span class="status-badge active">Available</span></td>
+                                <td>
+                                    <button class="quick-action-btn"><i class="fas fa-calendar-plus"></i> Assign</button>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+            
+            <!-- Meetings Section -->
+            <section id="meetings" class="content-section">
+                <div class="page-header">
+                    <div>
+                        <h2>Meeting Minutes</h2>
+                        <p>Create and manage EC meeting records</p>
+                    </div>
+                    <button class="btn-admin">
+                        <i class="fas fa-plus"></i> New Meeting
+                    </button>
+                </div>
+                
+                <div class="data-table">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Type</th>
+                                <th>Attendees</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>Feb 10, 2026</td>
+                                <td>EC Meeting</td>
+                                <td>8/9</td>
+                                <td><span class="status-badge active">Published</span></td>
+                                <td>
+                                    <button class="quick-action-btn"><i class="fas fa-edit"></i> Edit</button>
+                                    <button class="quick-action-btn"><i class="fas fa-file-pdf"></i> PDF</button>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+            
+            <!-- Magazine Section -->
+            <section id="magazine" class="content-section">
+                <div class="page-header">
+                    <div>
+                        <h2>Magazine Administration</h2>
+                        <p>Review and publish E-Magazine submissions</p>
+                    </div>
+                </div>
+                
+                <div class="data-table">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Author</th>
+                                <th>Title</th>
+                                <th>Type</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>Feb 09, 2026</td>
+                                <td>Anonymous</td>
+                                <td>স্মৃতির পথে</td>
+                                <td>Poem</td>
+                                <td><span class="status-badge pending">Under Review</span></td>
+                                <td>
+                                    <button class="quick-action-btn"><i class="fas fa-eye"></i> Read</button>
+                                    <button class="quick-action-btn" style="color: green;"><i class="fas fa-check"></i> Approve</button>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+            
+            <!-- RSVPs Section -->
+            <section id="rsvps" class="content-section">
+                <div class="page-header">
+                    <div>
+                        <h2>RSVPs & Check-ins</h2>
+                        <p>Manage event registrations and attendance</p>
+                    </div>
+                    <select class="form-control" style="width: auto;">
+                        <option>Nabo Borsho 1433</option>
+                        <option>Summer Picnic 2026</option>
+                    </select>
+                </div>
+                
+                <div class="stats-grid" style="margin-bottom: 2rem;">
+                    <div class="stat-card green">
+                        <div class="stat-icon green"><i class="fas fa-user-check"></i></div>
+                        <div class="stat-info">
+                            <h3>124</h3>
+                            <p>Total RSVPs</p>
+                        </div>
+                    </div>
+                    <div class="stat-card blue">
+                        <div class="stat-icon blue"><i class="fas fa-users"></i></div>
+                        <div class="stat-info">
+                            <h3>48</h3>
+                            <p>Families</p>
+                        </div>
+                    </div>
+                    <div class="stat-card orange">
+                        <div class="stat-icon orange"><i class="fas fa-child"></i></div>
+                        <div class="stat-info">
+                            <h3>32</h3>
+                            <p>Children</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="data-table">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Member</th>
+                                <th>Adults</th>
+                                <th>Children</th>
+                                <th>Payment</th>
+                                <th>Check-in</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>Das Family</td>
+                                <td>2</td>
+                                <td>2</td>
+                                <td><span class="status-badge active">Paid</span></td>
+                                <td><span class="status-badge pending">Pending</span></td>
+                                <td>
+                                    <button class="btn-admin success" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;">
+                                        <i class="fas fa-qrcode"></i> Check In
+                                    </button>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+            
+            <!-- Announcements Section -->
+            <section id="announcements" class="content-section">
+                <div class="page-header">
+                    <div>
+                        <h2>Announcements</h2>
+                        <p>Send notifications to members</p>
+                    </div>
+                    <button class="btn-admin">
+                        <i class="fas fa-plus"></i> New Announcement
+                    </button>
+                </div>
+                
+                <div class="form-card">
+                    <h4>Compose Announcement</h4>
+                    <form id="announcementForm">
+                        <div class="form-group">
+                            <label>Subject</label>
+                            <input type="text" class="form-control" placeholder="Announcement subject...">
+                        </div>
+                        <div class="form-group">
+                            <label>Message</label>
+                            <textarea class="form-control" rows="5" placeholder="Write your announcement..."></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label>Send To</label>
+                            <select class="form-control">
+                                <option>All Members</option>
+                                <option>Active Members Only</option>
+                                <option>EC Members</option>
+                                <option>Event Registrants</option>
+                            </select>
+                        </div>
+                        <div class="d-flex gap-2">
+                            <button type="submit" class="btn-admin">
+                                <i class="fas fa-paper-plane"></i> Send Now
+                            </button>
+                            <button type="button" class="btn-admin secondary">
+                                <i class="fas fa-clock"></i> Schedule
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </section>
+        </main>
+    </div>
+    
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <script>
+        // ========== NAVIGATION ==========
+        function showSection(sectionId, clickedNav) {
+            document.querySelectorAll('.content-section').forEach(section => {
+                section.classList.remove('active');
+            });
+            
+            const targetSection = document.getElementById(sectionId);
+            if (targetSection) {
+                targetSection.classList.add('active');
+            }
+            
+            document.querySelectorAll('.nav-item').forEach(nav => {
+                nav.classList.remove('active');
+            });
+            
+            if (clickedNav) {
+                clickedNav.classList.add('active');
+            } else {
+                document.querySelectorAll('.nav-item').forEach(nav => {
+                    if (nav.getAttribute('href') === '#' + sectionId) {
+                        nav.classList.add('active');
+                    }
+                });
+            }
+        }
+        
+        // ========== LOGOUT ==========
+        function logout() {
+            if (confirm('Are you sure you want to logout?')) {
+                localStorage.removeItem('banf_admin_token');
+                sessionStorage.removeItem('banf_admin_data');
+                
+                if (window.parent !== window) {
+                    window.parent.postMessage({ type: 'LOGOUT' }, '*');
+                } else {
+                    window.location.href = 'admin-login.html';
+                }
+            }
+        }
+        
+        // ========== ACTIONS ==========
+        function exportReport() {
+            alert('Generating admin report...');
+        }
+        
+        function addMember() {
+            alert('Add member modal - Coming soon!');
+        }
+        
+        // ========== INIT ==========
+        document.addEventListener('DOMContentLoaded', function() {
+            // Load admin data - redirect if not authenticated
+            const adminData = sessionStorage.getItem('banf_admin_data');
+            if (!adminData) {
+                // Not authenticated, redirect to login
+                window.location.href = 'admin-login.html';
+                return;
+            }
+            
+            const admin = JSON.parse(adminData);
+            document.getElementById('adminName').textContent = admin.name || 'Admin';
+            document.getElementById('adminRole').textContent = admin.role || 'EC Member';
+            
+            // Handle hash navigation
+            if (window.location.hash) {
+                const section = window.location.hash.substring(1);
+                showSection(section);
+            }
+        });
+        
+        // Listen for messages from parent (Wix)
+        window.addEventListener('message', function(event) {
+            if (event.data && event.data.type === 'ADMIN_DATA') {
+                sessionStorage.setItem('banf_admin_data', JSON.stringify(event.data.admin));
+            }
+        });
+    </script>
+</body>
+</html>

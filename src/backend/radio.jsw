@@ -57,3 +57,26 @@ export async function requestSong(request) {
     const result = await wixData.insert("SongRequests", songRequest);
     return { success: true, requestId: result._id };
 }
+
+// Backward-compatible aliases
+export async function getCurrentSchedule() {
+    return getRadioSchedule();
+}
+
+export async function getRadioStatus() {
+    try {
+        const nowPlaying = await getNowPlaying();
+        return {
+            success: true,
+            status: 'online',
+            currentShow: nowPlaying?.title || null,
+            streamUrl: ''
+        };
+    } catch (error) {
+        return {
+            success: false,
+            status: 'offline',
+            error: error.message
+        };
+    }
+}

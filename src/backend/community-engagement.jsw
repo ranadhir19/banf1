@@ -705,3 +705,60 @@ export async function exportDonationReport(year, userId) {
         return { success: false, error: error.message };
     }
 }
+
+/**
+ * Backward-compatible active initiatives API.
+ */
+export async function getActiveInitiatives(limit = 20) {
+    try {
+        const result = await wixData.query('CommunityInitiatives')
+            .eq('status', INITIATIVE_STATUS.ACTIVE)
+            .descending('updatedAt')
+            .limit(limit)
+            .find({ suppressAuth: true });
+        return { success: true, initiatives: result.items };
+    } catch (error) {
+        return { success: false, error: error.message, initiatives: [] };
+    }
+}
+
+export async function getActiveScholarships(limit = 20) {
+    try {
+        const result = await wixData.query('CommunityInitiatives')
+            .eq('initiativeType', INITIATIVE_TYPES.SCHOLARSHIP)
+            .eq('status', INITIATIVE_STATUS.ACTIVE)
+            .descending('updatedAt')
+            .limit(limit)
+            .find({ suppressAuth: true });
+        return { success: true, scholarships: result.items };
+    } catch (error) {
+        return { success: false, error: error.message, scholarships: [] };
+    }
+}
+
+export async function getCareerResources(limit = 20) {
+    try {
+        const sessions = await wixData.query('CareerGuidanceSessions')
+            .eq('status', 'scheduled')
+            .descending('createdAt')
+            .limit(limit)
+            .find({ suppressAuth: true });
+        return { success: true, resources: sessions.items };
+    } catch (error) {
+        return { success: false, error: error.message, resources: [] };
+    }
+}
+
+export async function getCharityPrograms(limit = 20) {
+    try {
+        const result = await wixData.query('CommunityInitiatives')
+            .eq('initiativeType', INITIATIVE_TYPES.CHARITY)
+            .eq('status', INITIATIVE_STATUS.ACTIVE)
+            .descending('updatedAt')
+            .limit(limit)
+            .find({ suppressAuth: true });
+        return { success: true, programs: result.items };
+    } catch (error) {
+        return { success: false, error: error.message, programs: [] };
+    }
+}

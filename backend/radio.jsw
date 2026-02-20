@@ -415,3 +415,25 @@ function getDefaultStationConfig() {
 
 // Export constants
 export const StationStatus = STATION_STATUS;
+
+export async function getCurrentSchedule() {
+    return getWeeklySchedule();
+}
+
+export async function getRadioStatus() {
+    try {
+        const config = await getRadioStationConfig();
+        return {
+            success: true,
+            status: config?.status || STATION_STATUS.OFFLINE,
+            currentShow: config?.currentShow || null,
+            streamUrl: config?.streamUrl || ''
+        };
+    } catch (error) {
+        return {
+            success: false,
+            status: STATION_STATUS.OFFLINE,
+            error: error.message
+        };
+    }
+}

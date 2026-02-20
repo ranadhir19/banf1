@@ -37,6 +37,108 @@ Once connected, Wix will pull all files from the repo:
 
 ---
 
+## 🧱 OPTION A2: Native Wix Landing Page (NO IFRAME)
+
+Use this when you want the Home page built with real Wix elements (recommended to avoid iframe issues).
+
+### What Wix CLI can and cannot do
+
+From the local CLI in this repo, available commands are:
+- `dev`
+- `preview`
+- `publish`
+- `install` / `uninstall`
+- `login` / `logout` / `whoami`
+
+**Important:** Wix CLI currently does **not** provide a command to auto-create visual page elements/sections/buttons in the Editor canvas.
+You still create layout elements in Wix Editor (or Wix Studio), then bind behavior with Velo code synced by CLI/GitHub.
+
+### No-iframe implementation flow
+
+1. In Wix Editor, open **Home** page (do not add HTML iframe).
+2. Build the page using native Wix elements (strips/containers/text/buttons/repeaters/forms).
+3. Assign IDs exactly from [WIX_ELEMENT_ID_MAPPING.md](WIX_ELEMENT_ID_MAPPING.md).
+4. Paste/use page logic from:
+  - [src/pages_backup/Home.js](src/pages_backup/Home.js)
+5. Keep site-wide logic in:
+  - [src/pages/masterPage/index.js](src/pages/masterPage/index.js)
+6. Publish from Editor.
+
+### Minimum section set to match current landing design
+
+- Header/nav (`imgLogo`, nav buttons, auth buttons)
+- Hero (`txtBengaliWelcome`, `txtEnglishWelcome`, `txtTagline`, CTAs)
+- Stats (`txtMemberCount`, `txtEventCount`, `txtSponsorCount`, `txtYearsCount`)
+- Quick access tiles (`quickEvents`, `quickMembers`, `quickGallery`, etc.)
+- Events repeater (`repeaterEvents` + child IDs)
+- News repeater (`repeaterNews` + child IDs)
+- Radio widget (`txtRadioStatus`, `btnPlayRadio`, etc.)
+- Contact form (`inputName`, `inputEmail`, `inputMessage`, `btnSubmitContact`)
+
+If IDs match, the existing Home Velo logic can run with little/no code rewrite.
+
+For full autonomous execution flow, see:
+- [AGENTIC_WIX_NATIVE_MIGRATION_PLAN.md](AGENTIC_WIX_NATIVE_MIGRATION_PLAN.md)
+
+For exact step-by-step build + full test gates, see:
+- [WIX_NATIVE_EXECUTION_RUNBOOK.md](WIX_NATIVE_EXECUTION_RUNBOOK.md)
+
+To execute automation-first migration/publish/smoke in one run, use:
+- [wix_native_execution_agent.py](wix_native_execution_agent.py)
+- [wix_post_publish_matrix_agent.py](wix_post_publish_matrix_agent.py) (full post-publish matrix)
+- [wix_release_orchestrator.py](wix_release_orchestrator.py) (single launcher for native + matrix + sign-off markdown)
+
+Example:
+
+```powershell
+cd C:\projects\survey\banf_web\wix-github-repo
+set WIX_EMAIL=your-email@example.com
+set WIX_PASSWORD=your-password
+C:\projects\survey\venv\Scripts\python.exe wix_native_execution_agent.py --url https://banfwix.wixsite.com/banf1
+```
+
+Notes:
+- `wix_native_execution_agent.py` now runs the full post-publish matrix automatically and fails on any P0 gate.
+- Use `--skip-matrix` only for troubleshooting.
+- To run the matrix standalone:
+
+```powershell
+cd C:\projects\survey\banf_web\wix-github-repo
+C:\projects\survey\venv\Scripts\python.exe wix_post_publish_matrix_agent.py --url https://banfwix.wixsite.com/banf1 --headless
+```
+
+Single-command orchestration (recommended for release sign-off):
+
+```powershell
+cd C:\projects\survey\banf_web\wix-github-repo
+C:\projects\survey\venv\Scripts\python.exe wix_release_orchestrator.py --url https://banfwix.wixsite.com/banf1 --headless
+```
+
+Output:
+- Native report JSON in `agent_reports/`
+- Matrix report JSON in `agent_reports/`
+- Sign-off markdown in `release_signoff/`
+
+If matrix fails due missing native elements, generate a targeted checklist:
+
+```powershell
+cd C:\projects\survey\banf_web\wix-github-repo
+C:\projects\survey\venv\Scripts\python.exe wix_native_id_gap_report.py
+```
+
+This creates `release_signoff/native_id_gap_*.md` with missing Wix IDs and element types.
+
+One-click launcher for release users (double-click):
+
+- [run_wix_release.cmd](run_wix_release.cmd)
+
+This wrapper runs the orchestrator with the default BANF URL and pauses at the end with pass/fail status.
+It is configured to use the editor URL:
+
+`https://editor.wix.com/html/editor/web/renderer/edit/5e03cc57-b39c-46a0-8879-040d433ca388?metaSiteId=c13ae8c5-7053-4f2d-9a9a-371869be4395`
+
+---
+
 ## 🔧 OPTION B: Manual Code Paste (FALLBACK)
 
 If GitHub integration doesn't work, paste code manually.
@@ -112,6 +214,9 @@ In the Code panel (left sidebar, `{ }` icon):
 2. Replace its content with the code from `src/pages/masterPage/index.js`
 
 ### Step 5: Set Up the Landing Page
+
+> Prefer **Option A2** above for native Wix elements (no iframe).
+> Use this iframe path only as fallback.
 
 **To display the landing page as the Home page:**
 

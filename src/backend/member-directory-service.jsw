@@ -840,3 +840,15 @@ async function isAdmin(memberId) {
 
 // Export constants
 export { VISIBILITY_LEVELS, PROFILE_FIELDS };
+
+/**
+ * Backward-compatible member search API.
+ */
+export async function searchMembers(searchTerm, options = {}) {
+    return searchDirectory({
+        ...options,
+        query: searchTerm,
+        page: options.page || 1,
+        limit: options.limit || 20
+    });
+}

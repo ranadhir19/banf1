@@ -821,3 +821,29 @@ export async function getStreamHealth() {
         };
     }
 }
+
+export async function getRadioSchedule() {
+    return getWeeklySchedule();
+}
+
+export async function getRadioShows(limit = 10) {
+    try {
+        const [current, upcoming] = await Promise.all([
+            getCurrentProgram(),
+            getUpcomingSpecialPrograms(30)
+        ]);
+
+        const shows = [];
+        if (current?.success && current.program) {
+            shows.push(current.program);
+        }
+        shows.push(...(upcoming || []));
+
+        return {
+            success: true,
+            shows: shows.slice(0, limit)
+        };
+    } catch (error) {
+        return { success: false, error: error.message, shows: [] };
+    }
+}

@@ -759,3 +759,65 @@ async function logVolunteerActivity(volunteerId, action, details) {
 
 // Export constants
 export { SKILL_CATEGORIES, VOLUNTEER_STATUS, TASK_STATUS };
+
+/**
+ * Backward-compatible volunteer application API.
+ */
+export async function applyForVolunteer(volunteerData) {
+    return registerVolunteer(volunteerData);
+}
+
+/**
+ * Backward-compatible volunteer history API.
+ */
+export async function getMyVolunteerHistory(memberId = null) {
+    try {
+        const member = await currentMember.getMember();
+        const effectiveMemberId = memberId || member?._id;
+
+        if (!effectiveMemberId) {
+            return { success: true, history: [] };
+        }
+
+        const volunteer = await wixData.query('Volunteers')
+            .eq('memberId', effectiveMemberId)
+            .limit(1)
+            .find({ suppressAuth: true });
+
+        if (volunteer.items.length === 0) {
+            return { success: true, history: [] };
+        }
+
+        const history = await wixData.query('VolunteerAssignments')
+            .eq('volunteerId', volunteer.items[0]._id)
+            .descending('assignedAt')
+            .limit(100)
+            .find({ suppressAuth: true });
+
+        return { success: true, history: history.items };
+    } catch (error) {
+        return { success: false, error: error.message, history: [] };
+    }
+}
+
+export async function getVolunteerOpportunities(eventId = null, filters = {}) {
+    try {
+        if (eventId) {
+            return getAvailableTasks(eventId, filters);
+        }
+
+        let query = wixData.query('VolunteerTasks')
+            .eq('status', TASK_STATUS.OPEN)
+            .ascending('eventDate')
+            .limit(filters?.limit || 100);
+
+        if (filters?.category) {
+            query = query.eq('category', filters.category);
+        }
+
+        const result = await query.find({ suppressAuth: true });
+        return { success: true, opportunities: result.items };
+    } catch (error) {
+        return { success: false, error: error.message, opportunities: [] };
+    }
+}

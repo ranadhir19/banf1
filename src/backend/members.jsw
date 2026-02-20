@@ -113,3 +113,8 @@ export async function memberLogin(email, password) {
         role: member.role || "member"
     };
 }
+
+// Backward-compatible alias
+export async function getMemberStats() {
+    return getMembershipStats();
+}

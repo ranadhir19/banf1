@@ -894,3 +894,56 @@ export async function getAdPlacements() {
         ]
     };
 }
+
+export async function getCampaigns(advertiserId = null, options = { limit: 50, skip: 0 }) {
+    try {
+        let query = wixData.query('AdCampaigns').descending('createdAt');
+        if (advertiserId) {
+            query = query.eq('advertiserId', advertiserId);
+        }
+        const result = await query
+            .limit(options?.limit || 50)
+            .skip(options?.skip || 0)
+            .find({ suppressAuth: true });
+        return { success: true, campaigns: result.items, totalCount: result.totalCount, hasNext: result.hasNext() };
+    } catch (error) {
+        return { success: false, error: error.message, campaigns: [] };
+    }
+}
+
+export async function getAdPerformance(campaignId, dateRange = {}, advertiserId = null) {
+    return getCampaignReport(campaignId, dateRange, advertiserId);
+}
+
+export async function isSponsorOrVendor(identity = {}) {
+    try {
+        const memberId = typeof identity === 'string' ? identity : identity.memberId;
+        const email = typeof identity === 'string' ? null : identity.email;
+
+        let sponsorQuery = wixData.query('Sponsors');
+        let vendorQuery = wixData.query('Vendors');
+
+        if (memberId) {
+            sponsorQuery = sponsorQuery.eq('memberId', memberId);
+            vendorQuery = vendorQuery.eq('memberId', memberId);
+        }
+        if (email) {
+            sponsorQuery = sponsorQuery.or(wixData.query('Sponsors').eq('email', email));
+            vendorQuery = vendorQuery.or(wixData.query('Vendors').eq('email', email));
+        }
+
+        const [sponsors, vendors] = await Promise.all([
+            sponsorQuery.limit(1).find({ suppressAuth: true }),
+            vendorQuery.limit(1).find({ suppressAuth: true })
+        ]);
+
+        return {
+            success: true,
+            isSponsor: sponsors.items.length > 0,
+            isVendor: vendors.items.length > 0,
+            isSponsorOrVendor: sponsors.items.length > 0 || vendors.items.length > 0
+        };
+    } catch (error) {
+        return { success: false, error: error.message, isSponsorOrVendor: false };
+    }
+}

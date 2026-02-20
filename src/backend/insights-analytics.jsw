@@ -277,7 +277,7 @@ export async function getDashboardData(dashboardType, userId) {
 /**
  * Get Financial Dashboard
  */
-async function getFinancialDashboard() {
+export async function getFinancialDashboard() {
     const now = new Date();
     const yearStart = new Date(now.getFullYear(), 0, 1);
     
@@ -325,7 +325,7 @@ async function getFinancialDashboard() {
 /**
  * Get Membership Dashboard
  */
-async function getMembershipDashboard() {
+export async function getMembershipDashboard() {
     const members = await wixData.query('Members')
         .find({ suppressAuth: true });
     
@@ -378,7 +378,7 @@ async function getMembershipDashboard() {
 /**
  * Get Event Dashboard
  */
-async function getEventDashboard() {
+export async function getEventDashboard() {
     const events = await wixData.query('Events')
         .descending('eventDate')
         .find({ suppressAuth: true });
@@ -432,7 +432,7 @@ async function getEventDashboard() {
 /**
  * Get Engagement Dashboard
  */
-async function getEngagementDashboard() {
+export async function getEngagementDashboard() {
     const [volunteers, surveys, complaints, community] = await Promise.all([
         wixData.query('VolunteerHours').find({ suppressAuth: true }),
         wixData.query('SurveyResponses').find({ suppressAuth: true }),
@@ -698,7 +698,7 @@ async function calculateEngagementScore() {
     return 78;
 }
 
-async function getActiveAlerts() {
+export async function getActiveAlerts() {
     return [
         { type: 'warning', message: '5 memberships expiring this week' },
         { type: 'info', message: 'New event registrations up 15%' }
@@ -780,3 +780,57 @@ function calculateAvgCTR(ads) {
     }, 0);
     return (totalCTR / withMetrics.length).toFixed(2);
 }
+
+/**
+ * Backward-compatible quick insights API.
+ */
+export async function getQuickInsights(userId) {
+    try {
+        const overview = await getExecutiveOverview(userId);
+        if (!overview?.success) {
+            return overview;
+        }
+
+        return {
+            success: true,
+            insights: {
+                membership: overview.overview?.membership,
+                financial: overview.overview?.financial,
+                events: overview.overview?.events,
+                alerts: overview.alerts || []
+            },
+            timestamp: overview.timestamp
+        };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
+}
+
+/**
+ * Backward-compatible alert dismissal API.
+ */
+export async function dismissAlert(alertId, userId) {
+    try {
+        const hasPermission = await hasSpecializedPermission(userId, 'insights_view');
+        if (!hasPermission) {
+            return { success: false, error: 'Not authorized' };
+        }
+
+        const alert = await wixData.get('SystemAlerts', alertId, { suppressAuth: true });
+        if (!alert) {
+            return { success: false, error: 'Alert not found' };
+        }
+
+        await wixData.update('SystemAlerts', {
+            ...alert,
+            status: 'dismissed',
+            dismissedBy: userId,
+            dismissedAt: new Date()
+        }, { suppressAuth: true });
+
+        return { success: true };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
+}
+

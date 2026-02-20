@@ -881,3 +881,37 @@ async function getRecentTaggedPhotos(memberId) {
 
 // Export constants
 export { ROLES, SERVICE_CATEGORIES };
+
+export async function getDashboardStats() {
+    try {
+        const dashboard = await getDashboard();
+        if (!dashboard?.success) {
+            return { success: false, error: dashboard?.error || 'Unable to load dashboard' };
+        }
+
+        const widgets = dashboard.dashboard?.widgets || [];
+        return {
+            success: true,
+            stats: {
+                role: dashboard.role,
+                serviceCount: (dashboard.dashboard?.services || []).length,
+                widgetCount: widgets.length,
+                quickActionCount: (dashboard.dashboard?.quickActions || []).length
+            }
+        };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
+}
+
+export async function getRecentActivity(limit = 10) {
+    try {
+        const result = await wixData.query('DashboardActivityLog')
+            .descending('timestamp')
+            .limit(limit)
+            .find({ suppressAuth: true });
+        return { success: true, activities: result.items };
+    } catch (_) {
+        return { success: true, activities: [] };
+    }
+}

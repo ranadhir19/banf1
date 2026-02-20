@@ -312,3 +312,24 @@ export async function checkMembershipStatus(memberId) {
         return { success: false, error: error.message };
     }
 }
+
+// Backward-compatible aliases
+export async function register(memberData) {
+    return registerMember(memberData);
+}
+
+export async function login(email, password) {
+    return loginMember(email, password);
+}
+
+export async function getCurrentMember() {
+    try {
+        const user = wixUsersBackend.currentUser;
+        if (!user || !user.id) {
+            return { success: false, error: 'No active member session' };
+        }
+        return getMemberProfile(user.id);
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
+}

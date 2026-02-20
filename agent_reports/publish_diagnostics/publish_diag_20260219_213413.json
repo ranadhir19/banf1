@@ -1,0 +1,25 @@
+{
+  "started_at": 1771554853.8964055,
+  "finished_at": 1771554986.9384692,
+  "editor_url": "https://editor.wix.com/html/editor/web/renderer/edit/5e03cc57-b39c-46a0-8879-040d433ca388?metaSiteId=c13ae8c5-7053-4f2d-9a9a-371869be4395",
+  "site_id": "c13ae8c5-7053-4f2d-9a9a-371869be4395",
+  "login_required": true,
+  "publish_clicked": false,
+  "findings": [
+    {
+      "source": "login",
+      "severity": "error",
+      "text": "Manual login was not completed before timeout"
+    }
+  ],
+  "console_errors": [
+    "Failed to load resource: the server responded with a status of 400 (Bad Request)",
+    "Failed to load resource: the server responded with a status of 400 (Bad Request)"
+  ],
+  "probable_causes": [
+    "NETWORK_CONNECTIVITY_OR_PROXY"
+  ],
+  "artifacts": {
+    "login_blocked_screenshot": "C:\\projects\\survey\\banf_web\\wix-github-repo\\agent_reports\\publish_diagnostics\\publish_diag_login_blocked_20260219_213413.png"
+  }
+}

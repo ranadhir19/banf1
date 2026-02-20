@@ -901,3 +901,54 @@ async function isAdmin(memberId) {
 
 // Export constants
 export { MESSAGE_TEMPLATES, CHANNEL_TYPES };
+
+export async function getAnnouncements(options = { limit: 10 }) {
+    try {
+        const result = await wixData.query('Announcements')
+            .eq('isActive', true)
+            .descending('createdAt')
+            .limit(options?.limit || 10)
+            .find({ suppressAuth: true });
+        return { success: true, announcements: result.items };
+    } catch (_) {
+        try {
+            const campaigns = await wixData.query('CommCampaigns')
+                .eq('status', 'sent')
+                .descending('createdAt')
+                .limit(options?.limit || 10)
+                .find({ suppressAuth: true });
+            return { success: true, announcements: campaigns.items };
+        } catch (error) {
+            return { success: false, error: error.message, announcements: [] };
+        }
+    }
+}
+
+export async function sendContactMessage(messageData) {
+    try {
+        const record = await wixData.insert('ContactMessages', {
+            name: messageData?.name || '',
+            email: messageData?.email || '',
+            subject: messageData?.subject || 'Contact Message',
+            message: messageData?.message || '',
+            status: 'new',
+            createdAt: new Date()
+        }, { suppressAuth: true });
+        return { success: true, messageId: record._id };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
+}
+
+export async function submitFeedback(feedbackData) {
+    try {
+        const record = await wixData.insert('Feedback', {
+            ...feedbackData,
+            submittedAt: new Date(),
+            status: 'new'
+        }, { suppressAuth: true });
+        return { success: true, feedbackId: record._id };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
+}

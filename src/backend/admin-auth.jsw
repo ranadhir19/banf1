@@ -358,3 +358,36 @@ export async function getAdminActivityLog(requesterId, limit = 100) {
         return { success: false, error: error.message };
     }
 }
+
+/**
+ * Backward-compatible admin dashboard API.
+ */
+export async function getAdminDashboard(adminId) {
+    try {
+        const allowed = await checkAdminPermission(adminId, 'admin_management') ||
+            await checkAdminPermission(adminId, 'reports');
+
+        if (!allowed) {
+            return { success: false, error: 'Not authorized' };
+        }
+
+        const [admins, recent] = await Promise.all([
+            wixData.query('Admins').eq('isActive', true).find({ suppressAuth: true }),
+            wixData.query('AdminActivityLog').descending('timestamp').limit(10).find({ suppressAuth: true })
+        ]);
+
+        return {
+            success: true,
+            stats: {
+                totalAdmins: admins.totalCount,
+                byRole: admins.items.reduce((acc, a) => {
+                    acc[a.role] = (acc[a.role] || 0) + 1;
+                    return acc;
+                }, {})
+            },
+            recentActivity: recent.items
+        };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
+}

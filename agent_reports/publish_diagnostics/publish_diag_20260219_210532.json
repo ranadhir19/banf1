@@ -1,0 +1,141 @@
+{
+  "started_at": 1771553132.4510543,
+  "finished_at": 1771553265.9417853,
+  "editor_url": "https://editor.wix.com/html/editor/web/renderer/edit/5e03cc57-b39c-46a0-8879-040d433ca388?metaSiteId=c13ae8c5-7053-4f2d-9a9a-371869be4395",
+  "site_id": "c13ae8c5-7053-4f2d-9a9a-371869be4395",
+  "login_required": true,
+  "publish_clicked": true,
+  "findings": [
+    {
+      "source": "ui",
+      "severity": "error",
+      "text": "Site Settings Dev Mode Hire a Professional Help Upgrade Save Preview Publish home banf1.com is available.Connect Your Domain 100% Tools Search Developer Tools Latest Build Status: Error 2026-02-19 21:07:32 View build.log Monitoring Monitoring Monitor your backend traffic to detect code issues and errors. Logging Tools Wix Logs View detailed logs in real time in an easy-to-use tool. Google Cloud Logs View, filter, and search logs from the past 30 days and in real time. Security Secrets Manager St"
+    },
+    {
+      "source": "ui",
+      "severity": "error",
+      "text": "Developer Tools Latest Build Status: Error 2026-02-19 21:07:32 View build.log Monitoring Monitoring Monitor your backend traffic to detect code issues and errors. Logging Tools Wix Logs View detailed logs in real time in an easy-to-use tool. Google Cloud Logs View, filter, and search logs from the past 30 days and in real time. Security Secrets Manager Store API keys to safely use in your code. Automation Triggered Emails Send automated emails for any action you choose. Add Elements Add Section "
+    },
+    {
+      "source": "ui",
+      "severity": "error",
+      "text": "Developer Tools Latest Build Status: Error 2026-02-19 21:07:32 View build.log Monitoring Monitoring Monitor your backend traffic to detect code issues and errors. Logging Tools Wix Logs View detailed logs in real time in an easy-to-use tool. Google Cloud Logs View, filter, and search logs from the past 30 days and in real time. Security Secrets Manager Store API keys to safely use in your code. Automation Triggered Emails Send automated emails for any action you choose."
+    },
+    {
+      "source": "ui",
+      "severity": "error",
+      "text": "Latest Build Status: Error 2026-02-19 21:07:32 View build.log Monitoring Monitoring Monitor your backend traffic to detect code issues and errors. Logging Tools Wix Logs View detailed logs in real time in an easy-to-use tool. Google Cloud Logs View, filter, and search logs from the past 30 days and in real time. Security Secrets Manager Store API keys to safely use in your code. Automation Triggered Emails Send automated emails for any action you choose."
+    },
+    {
+      "source": "ui",
+      "severity": "error",
+      "text": "Latest Build Status: Error 2026-02-19 21:07:32 View build.log"
+    },
+    {
+      "source": "ui",
+      "severity": "error",
+      "text": "Status: Error 2026-02-19 21:07:32 View build.log"
+    },
+    {
+      "source": "ui",
+      "severity": "error",
+      "text": "Status: Error"
+    },
+    {
+      "source": "ui",
+      "severity": "error",
+      "text": "Monitoring Monitoring Monitor your backend traffic to detect code issues and errors."
+    },
+    {
+      "source": "ui",
+      "severity": "error",
+      "text": "Monitoring Monitor your backend traffic to detect code issues and errors."
+    },
+    {
+      "source": "ui",
+      "severity": "error",
+      "text": "Monitor your backend traffic to detect code issues and errors."
+    },
+    {
+      "source": "ui",
+      "severity": "error",
+      "text": "Add Elements Add Section Pages & Menu Site Design 1 Add Apps My Business Media CMS Marketing & SEO AI Tools home.mainPage.js build.log Run ------------------------------------------------------ deploymentId: f06f1053-40a3-4cd9-a044-168fbad0e99d 2/19/2026, 9:07:32 PM Status: Error ------------------------------------------------------ [masterPage.js]: Cannot find module 'backend/sponsors.jsw' in 'public/pages/masterPage.js'"
+    }
+  ],
+  "console_errors": [
+    "Framing 'https://accounts.google.com/' violates the following report-only Content Security Policy directive: \"frame-ancestors 'self'\". The violation has been logged, but no further action has been taken.\n",
+    "Failed to load resource: the server responded with a status of 400 (Bad Request)",
+    "Failed to load resource: the server responded with a status of 400 (Bad Request)",
+    "Failed to load resource: the server responded with a status of 403 (Forbidden)",
+    "Failed to load resource: the server responded with a status of 400 (Bad Request)",
+    "Failed to load resource: the server responded with a status of 400 (Bad Request)",
+    "Failed to load resource: net::ERR_NETWORK_CHANGED",
+    "Failed to load resource: net::ERR_NETWORK_CHANGED",
+    "Failed to load resource: net::ERR_NETWORK_CHANGED",
+    "Failed to load resource: net::ERR_NETWORK_CHANGED",
+    "Failed to load resource: net::ERR_NETWORK_CHANGED",
+    "Failed to load resource: net::ERR_NETWORK_CHANGED",
+    "Failed to load resource: net::ERR_NETWORK_CHANGED",
+    "Failed to load resource: net::ERR_NETWORK_CHANGED",
+    "Failed to load resource: net::ERR_NETWORK_CHANGED",
+    "Failed to load resource: net::ERR_NETWORK_CHANGED",
+    "Failed to load resource: net::ERR_NETWORK_CHANGED",
+    "Failed to load resource: net::ERR_NETWORK_CHANGED",
+    "Failed to load resource: net::ERR_NETWORK_CHANGED",
+    "Failed to load resource: net::ERR_NETWORK_CHANGED",
+    "Failed to load resource: net::ERR_NETWORK_CHANGED",
+    "Failed to load resource: net::ERR_NETWORK_CHANGED",
+    "Failed to load resource: net::ERR_NETWORK_CHANGED",
+    "Failed to load resource: net::ERR_NETWORK_CHANGED",
+    "Failed to load resource: net::ERR_NETWORK_CHANGED",
+    "Failed to load resource: net::ERR_NETWORK_CHANGED",
+    "Failed to load resource: net::ERR_NETWORK_CHANGED",
+    "Failed to load resource: net::ERR_NETWORK_CHANGED",
+    "Failed to load resource: net::ERR_NETWORK_CHANGED",
+    "Failed to load resource: net::ERR_NETWORK_CHANGED",
+    "Failed to load resource: net::ERR_NETWORK_CHANGED",
+    "Failed to load resource: net::ERR_NETWORK_CHANGED",
+    "ChunkLoadError: Loading chunk 75 failed.\n(error: https://static.parastorage.com/services/business-milestone-app/9e1619b0686516244c0f3beefc1623f76cd10961b0528ed513a4ce7d/7caf65c0-34b2-4af4-8512-81d7f7719451.chunk.min.js)\n    at i.f.j (https://static.parastorage.com/services/business-milestone-app/9e1",
+    "ChunkLoadError: Loading chunk 9604 failed.\n(error: https://static.parastorage.com/services/dashboard-setup-app/448e4b87c3e4228d63be778c2cea64d068fd489d111655e954c3943b/e44e13d0-69e0-4478-96cf-d6f502ca3664.chunk.min.js)\n    at s.f.j (https://static.parastorage.com/services/dashboard-setup-app/448e4b8",
+    "ChunkLoadError: Loading chunk 6443 failed.\n(error: https://static.parastorage.com/services/dashboard-site-details-app/c21b2c5e98f9c1649a4c349d784d6e67d1a2e26c73f7096d65283e37/dc09bc59-6367-45be-a676-17f3940237ba.chunk.min.js)\n    at s.f.j (https://static.parastorage.com/services/dashboard-site-detai",
+    "ChunkLoadError: Loading chunk 9656 failed.\n(error: https://static.parastorage.com/services/oauth-apps-settings/63ee8c172951477c65014109cbffb0c409bfe5718748c5f41035256c/78d97990324eeae04e36277b6354c01b9e96aafc.chunk.min.js)\n    at i.f.j (https://static.parastorage.com/services/oauth-apps-settings/63e",
+    "ChunkLoadError: Loading chunk 7448 failed.\n(error: https://static.parastorage.com/services/dashboard-setup-app/448e4b87c3e4228d63be778c2cea64d068fd489d111655e954c3943b/41f1e45d-6d9c-446a-9c5b-6f30608f25c4.chunk.min.js)\n    at s.f.j (https://static.parastorage.com/services/dashboard-setup-app/448e4b8",
+    "Error: Minified React error #130; visit https://reactjs.org/docs/error-decoder.html?invariant=130&args[]=undefined&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings.\n    at Oc (https://static.parastorage.com/unpkg/react-dom@16.14.0/u",
+    "Error: Minified React error #130; visit https://reactjs.org/docs/error-decoder.html?invariant=130&args[]=undefined&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings.\n    at Oc (https://static.parastorage.com/unpkg/react-dom@16.14.0/u",
+    "The Content Security Policy directive 'frame-ancestors' is ignored when delivered via a <meta> element.",
+    "editorPointerAPI is empty {}",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Response",
+    "Response",
+    "Failed to load resource: the server responded with a status of 403 (Forbidden)",
+    "Response",
+    "Response",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 403 (Forbidden)",
+    "Failed to load resource: the server responded with a status of 403 (Forbidden)",
+    "Failed to load resource: the server responded with a status of 403 (Forbidden)",
+    "Failed to load resource: the server responded with a status of 403 (Forbidden)",
+    "Failed to load resource: the server responded with a status of 403 (Forbidden)",
+    "Failed to load resource: the server responded with a status of 403 (Forbidden)",
+    "Access to XMLHttpRequest at 'https://unpkg.com/@wix/wix-code-types@~2/dist/jsons/nonDeprecatedWixModules.json' from origin 'https://editor.wix.com' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource.",
+    "Failed to load resource: net::ERR_FAILED",
+    "Access to XMLHttpRequest at 'https://unpkg.com/@wix/wix-code-types@~2/dist/jsons/deprecatedWixModules.json' from origin 'https://editor.wix.com' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource.",
+    "Failed to load resource: net::ERR_FAILED",
+    "Access to XMLHttpRequest at 'https://unpkg.com/@wix/wix-code-types@~2/dist/jsons/wixSdks.json' from origin 'https://editor.wix.com' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource.",
+    "Failed to load resource: net::ERR_FAILED",
+    "Access to XMLHttpRequest at 'https://unpkg.com/@wix/wix-code-types@~2/dist/jsons/fullWixCodeTypes.json' from origin 'https://editor.wix.com' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource.",
+    "Failed to load resource: net::ERR_FAILED",
+    "Save has failed - please see the failure details below: {document: Object}",
+    "Failed to load resource: the server responded with a status of 429 (TOO MANY REQUESTS)",
+    "Failed to load resource: the server responded with a status of 429 (TOO MANY REQUESTS)",
+    "Failed to load resource: the server responded with a status of 429 (TOO MANY REQUESTS)"
+  ],
+  "probable_causes": [
+    "AUTH_OR_PERMISSION_ISSUE"
+  ],
+  "artifacts": {
+    "editor_loaded_screenshot": "C:\\projects\\survey\\banf_web\\wix-github-repo\\agent_reports\\publish_diagnostics\\publish_diag_editor_loaded_20260219_210532.png",
+    "page_html": "C:\\projects\\survey\\banf_web\\wix-github-repo\\agent_reports\\publish_diagnostics\\publish_diag_page_20260219_210532.html",
+    "after_publish_screenshot": "C:\\projects\\survey\\banf_web\\wix-github-repo\\agent_reports\\publish_diagnostics\\publish_diag_after_publish_20260219_210532.png"
+  }
+}

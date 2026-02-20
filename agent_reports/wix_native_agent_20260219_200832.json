@@ -1,0 +1,182 @@
+{
+  "started_at": 1771549583.5941498,
+  "finished_at": 1771549712.562258,
+  "site_id": "c13ae8c5-7053-4f2d-9a9a-371869be4395",
+  "site_url": "https://banfwix.wixsite.com/banf1",
+  "steps": [
+    {
+      "step": "preflight.site_id",
+      "ok": true,
+      "message": "siteId=c13ae8c5-7053-4f2d-9a9a-371869be4395",
+      "details": {}
+    },
+    {
+      "step": "preflight.file.mapping",
+      "ok": true,
+      "message": "C:\\projects\\survey\\banf_web\\wix-github-repo\\WIX_ELEMENT_ID_MAPPING.md",
+      "details": {}
+    },
+    {
+      "step": "preflight.file.home_code",
+      "ok": true,
+      "message": "C:\\projects\\survey\\banf_web\\wix-github-repo\\src\\pages_backup\\Home.js",
+      "details": {}
+    },
+    {
+      "step": "preflight.wix_auth",
+      "ok": true,
+      "message": "Logged in as banfjax@gmail.com",
+      "details": {}
+    },
+    {
+      "step": "preflight.id_inventory",
+      "ok": true,
+      "message": "72 IDs discovered",
+      "details": {}
+    },
+    {
+      "step": "editor.login",
+      "ok": true,
+      "message": "Logged in URL=https://manage.wix.com/dashboard/c13ae8c5-7053-4f2d-9a9a-371869be4395/setup",
+      "details": {}
+    },
+    {
+      "step": "editor.open",
+      "ok": true,
+      "message": "Editor URL=https://editor.wix.com/html/editor/web/renderer/edit/5e03cc57-b39c-46a0-8879-040d433ca388?metaSiteId=c13ae8c5-7053-4f2d-",
+      "details": {}
+    },
+    {
+      "step": "editor.dev_mode",
+      "ok": true,
+      "message": "Dev mode enabled or toggle attempted",
+      "details": {}
+    },
+    {
+      "step": "editor.code_panel",
+      "ok": false,
+      "message": "Code panel opened/attempted",
+      "details": {}
+    },
+    {
+      "step": "editor.apply_home_code",
+      "ok": true,
+      "message": "Applied Home.js to editor model",
+      "details": {}
+    },
+    {
+      "step": "editor.publish",
+      "ok": true,
+      "message": "Publish clicked",
+      "details": {}
+    },
+    {
+      "step": "smoke.no_iframe",
+      "ok": false,
+      "message": "iframe_count=1",
+      "details": {}
+    },
+    {
+      "step": "smoke.critical_ids",
+      "ok": false,
+      "message": "Some critical IDs missing",
+      "details": {}
+    }
+  ],
+  "discovered_ids": [
+    "btnJoinBANF",
+    "imgLogo",
+    "navHome",
+    "navEvents",
+    "navMembers",
+    "navGallery",
+    "navMagazine",
+    "navRadio",
+    "navSponsors",
+    "navVolunteer",
+    "navContact",
+    "btnLogin",
+    "btnRegister",
+    "btnUserMenu",
+    "txtBengaliWelcome",
+    "txtEnglishWelcome",
+    "txtTagline",
+    "btnExploreEvents",
+    "imgHero",
+    "txtMemberCount",
+    "txtEventCount",
+    "txtSponsorCount",
+    "txtYearsCount",
+    "quickEvents",
+    "quickMembers",
+    "quickGallery",
+    "quickMagazine",
+    "quickRadio",
+    "quickVolunteer",
+    "quickDonate",
+    "quickCommunity",
+    "repeaterEvents",
+    "txtNoEvents",
+    "btnViewAllEvents",
+    "txtEventTitle",
+    "txtEventDate",
+    "txtEventVenue",
+    "imgEvent",
+    "btnEventDetails",
+    "repeaterNews",
+    "btnViewAllNews",
+    "txtNewsTitle",
+    "txtNewsDate",
+    "txtNewsPreview",
+    "txtRadioStatus",
+    "txtCurrentShow",
+    "txtNextShow",
+    "btnPlayRadio",
+    "btnRadioSchedule",
+    "inputName",
+    "inputEmail",
+    "inputMessage",
+    "btnSubmitContact",
+    "txtContactSuccess",
+    "txtWelcome",
+    "boxMemberSection",
+    "btnMemberLogin",
+    "btnLogout",
+    "btnProfile",
+    "btnPayment",
+    "boxHeader",
+    "boxHero",
+    "boxStats",
+    "boxQuickAccess",
+    "boxEvents",
+    "boxNews",
+    "boxRadio",
+    "boxContact",
+    "boxFooter",
+    "Events",
+    "NewsAnnouncements",
+    "Feedback"
+  ],
+  "smoke": {
+    "url": "https://banfwix.wixsite.com/banf1",
+    "has_iframe": true,
+    "id_presence": {
+      "btnLogin": false,
+      "btnRegister": false,
+      "btnJoinBANF": false,
+      "btnExploreEvents": false,
+      "txtMemberCount": false,
+      "repeaterEvents": false,
+      "repeaterNews": false,
+      "btnSubmitContact": false
+    },
+    "critical_buttons": {
+      "btnLogin": false,
+      "btnRegister": false,
+      "btnJoinBANF": false,
+      "btnExploreEvents": false
+    },
+    "iframe_count": 1
+  },
+  "duration_sec": 128.97
+}
