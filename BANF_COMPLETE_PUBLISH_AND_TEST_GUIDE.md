@@ -152,16 +152,14 @@ cat wix.config.json            # Should show siteId: c13ae8c5-...
 
 ## 4. Install Dependencies & Update Wix CLI
 
-### Step 4a: Rename the corporate .npmrc
+### Step 4a: Verify the npm registry
 
-**CRITICAL** — The repo contains an `.npmrc` that points to a corporate Artifactory proxy.
-This MUST be renamed so npm uses the public registry.
+The repo's `.npmrc` is configured to use the public npm registry.
 
 ```bash
-# Check if .npmrc exists and contains corporate proxy
+# Confirm .npmrc points at the public registry
 cat .npmrc
-# If it shows "artifactory.fis.dev", rename it:
-mv .npmrc .npmrc.corporate_bak
+# It should show: registry=https://registry.npmjs.org/
 ```
 
 ### Step 4b: Install dependencies
