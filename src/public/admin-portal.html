@@ -1495,7 +1495,7 @@
                 if (window.parent !== window) {
                     window.parent.postMessage({ type: 'LOGOUT' }, '*');
                 } else {
-                    window.location.href = 'admin-login.html';
+                    window.location.href = '../../admin-login.html';
                 }
             }
         }
@@ -1515,7 +1515,7 @@
             const adminData = sessionStorage.getItem('banf_admin_data');
             if (!adminData) {
                 // Not authenticated, redirect to login
-                window.location.href = 'admin-login.html';
+                window.location.href = '../../admin-login.html';
                 return;
             }
             

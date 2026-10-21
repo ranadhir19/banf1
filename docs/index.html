@@ -1669,8 +1669,57 @@
             input, select, textarea { font-size: 16px !important; }
         }
     </style>
+    <style>
+        /* ===== Sharodotsav 2026 announcement bar + flyer ===== */
+        .sharodotsav-notice {
+            position: fixed; top: 0; left: 0; right: 0; z-index: 1100;
+            background: #8B0000; color: #ffffff; border-bottom: 3px solid #D4AF37;
+            text-align: center; padding: 7px 12px;
+            font-family: 'Inter', sans-serif; font-size: 13px; line-height: 1.4;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.3);
+        }
+        .navbar { top: 54px; }
+        .hero { padding-top: 114px; }
+        .sharodotsav-section {
+            background: linear-gradient(180deg, #fff8ee 0%, #ffffff 100%);
+            padding: 2.5rem 0 2rem; scroll-margin-top: 120px;
+        }
+        .sharodotsav-heading {
+            font-family: 'Playfair Display', serif; font-weight: 700;
+            color: #8B0000; text-align: center; font-size: 2rem; margin-bottom: 0.25rem;
+        }
+        .sharodotsav-subrule {
+            width: 90px; height: 3px; background: #D4AF37;
+            margin: 0.5rem auto 1.25rem; border-radius: 2px;
+        }
+        .sharodotsav-flyer-img {
+            display: block; width: 100%; max-width: 640px; margin: 0 auto;
+            border: 3px solid #D4AF37; border-radius: 12px;
+            box-shadow: 0 12px 32px rgba(139, 0, 0, 0.25);
+        }
+        .sharodotsav-caption {
+            font-family: 'Inter', sans-serif; text-align: center; color: #1a1a2e;
+            max-width: 760px; margin: 1.1rem auto 0; font-size: 1rem; line-height: 1.55;
+        }
+        @media (max-width: 991px) {
+            .navbar { top: 72px; }
+            .hero { padding-top: 132px; }
+        }
+        @media (max-width: 767px) {
+            .sharodotsav-notice { font-size: 11.5px; line-height: 1.35; padding: 6px 8px; }
+            .navbar { top: 100px; }
+            .hero { padding-top: 158px; }
+            .sharodotsav-heading { font-size: 1.55rem; }
+        }
+        @media (max-width: 374px) {
+            .navbar { top: 116px; }
+            .hero { padding-top: 174px; }
+        }
+    </style>
 </head>
 <body oncontextmenu="return false;">
+    <!-- ========== SHARODOTSAV 2026 NOTIFICATION BAR ========== -->
+    <div class="sharodotsav-notice" role="region" aria-label="Sharodotsav Durga Puja 2026 announcement">🪔 Sharodotsav · Durga Puja 2026 — THIS WEEKEND · Sat Oct 24 & Sun Oct 25 · 223 Mill Creek Road, Jacksonville · Puja & Pushpanjali FREE for all · Celebration Pass from $70 — Family $210 · Couple $175 · Individual $100 · Student $70 · Tickets: Moumita (904) 933-5777 · Partha 407-773-9984</div>
     <!-- ========== NAVIGATION ========== -->
     <nav class="navbar navbar-expand-lg">
         <div class="container">
@@ -1719,6 +1768,18 @@
                     <i class="fas fa-calendar-alt"></i>Upcoming Events
                 </a>
             </div>
+        </div>
+    </section>
+
+    <!-- ========== SHARODOTSAV 2026 FLYER ========== -->
+    <section id="sharodotsav-flyer" class="sharodotsav-section">
+        <div class="container">
+            <h2 class="sharodotsav-heading">Sharodotsav — Durga Puja 2026</h2>
+            <div class="sharodotsav-subrule"></div>
+            <a href="assets/sharodotsav-2026-flyer.jpg" target="_blank" rel="noopener" title="Open the full-size Sharodotsav 2026 flyer">
+                <img class="sharodotsav-flyer-img" src="assets/sharodotsav-2026-flyer.jpg" alt="BANF Sharodotsav Durga Puja 2026 flyer — Oct 24-25, 223 Mill Creek Road Jacksonville; Krosswindz Saturday, Soumya Chakraborty Sunday">
+            </a>
+            <p class="sharodotsav-caption">Two unforgettable musical evenings — Krosswindz (Sat, Oct 24) & Soumya Chakraborty & Team (Sun, Oct 25), 6:00–8:00 PM. Full schedule, menu and pass prices in the flyer above.</p>
         </div>
     </section>
 
@@ -2270,6 +2331,7 @@
                             <h4>Durga Puja 2026</h4>
                             <p class="event-location"><i class="fas fa-map-marker-alt"></i>230+ Attendees</p>
                             <p class="small text-muted">5-day puja celebration</p>
+                            <p class="mb-0"><a href="#sharodotsav-flyer" onclick="event.stopPropagation();" style="color: #8B0000; font-weight: 600; font-size: 0.85rem;">🪔 View Flyer</a></p>
                         </div>
                     </div>
                 </div>

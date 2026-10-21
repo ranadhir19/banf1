@@ -1182,7 +1182,7 @@
                 if (window.parent !== window) {
                     window.parent.postMessage({ type: 'LOGOUT' }, '*');
                 } else {
-                    window.location.href = 'member-login.html';
+                    window.location.href = '../../member-login.html';
                 }
             }
         }
@@ -1193,7 +1193,7 @@
             const memberData = sessionStorage.getItem('banf_member_data');
             if (!memberData) {
                 // Not authenticated, redirect to login
-                window.location.href = 'member-login.html';
+                window.location.href = '../../member-login.html';
                 return;
             }
             
